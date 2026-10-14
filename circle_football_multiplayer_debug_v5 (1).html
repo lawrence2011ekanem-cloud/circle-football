@@ -1,0 +1,2134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Circle Football - Prototype</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #111827;
+    color: #f8fafc;
+    font-family: Arial, Helvetica, sans-serif;
+    overflow: hidden;
+  }
+  .wrap {
+    width: min(1000px, 96vw);
+  }
+  .top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 10px;
+  }
+  h1 { margin: 0; font-size: 24px; }
+  .hint { color: #cbd5e1; font-size: 14px; }
+  .score-area { display: flex; align-items: center; gap: 18px; }
+  #timer { font-variant-numeric: tabular-nums; min-width: 48px; text-align: center; font-weight: 900; font-size: 22px; }
+
+  #score {
+    font-size: 20px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .game-shell {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 18px 50px rgba(0,0,0,.35);
+    background: #15803d;
+  }
+  canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: crosshair;
+  }
+  .charge-wrap {
+    position: absolute;
+    left: 50%;
+    bottom: 14px;
+    transform: translateX(-50%);
+    width: min(300px, 55%);
+    pointer-events: none;
+  }
+  .charge-label {
+    text-align: center;
+    font-size: 12px;
+    margin-bottom: 5px;
+    text-shadow: 0 1px 2px #000;
+  }
+  .bar {
+    height: 12px;
+    border: 2px solid rgba(255,255,255,.9);
+    border-radius: 999px;
+    background: rgba(0,0,0,.35);
+    overflow: hidden;
+  }
+  #charge {
+    height: 100%;
+    width: 0%;
+    background: #facc15;
+    transition: width .03s linear;
+  }
+  .message {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+  }
+  #goalMessage {
+    opacity: 0;
+    transform: scale(.8);
+    font-size: clamp(28px, 6vw, 64px);
+    font-weight: 900;
+    text-shadow: 0 4px 12px rgba(0,0,0,.45);
+    transition: opacity .15s, transform .15s;
+  }
+  #goalMessage.show {
+    opacity: 1;
+    transform: scale(1);
+  }
+  #goalMessage.fade-out {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+  .fulltime-controls {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 18px;
+    pointer-events: auto;
+  }
+  .fulltime-controls button {
+    font-size: 15px;
+    padding: 10px 16px;
+    background: #2563eb;
+  }
+  .fulltime-controls button:hover { background: #1d4ed8; }
+  .fulltime-controls #backMenuBtn { background: #475569; }
+  .fulltime-controls #backMenuBtn:hover { background: #64748b; }
+  .bottom {
+    margin-top: 9px;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    color: #cbd5e1;
+    font-size: 13px;
+  }
+  button {
+    border: 0;
+    border-radius: 8px;
+    padding: 8px 12px;
+    background: #334155;
+    color: white;
+    cursor: pointer;
+    font-weight: 700;
+  }
+  button:hover { background: #475569; }
+
+  .menu-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: grid;
+    place-items: center;
+    background: rgba(17,24,39,.92);
+  }
+  .menu-card {
+    text-align: center;
+    padding: 42px 55px;
+    border-radius: 18px;
+    background: #1f2937;
+    box-shadow: 0 20px 60px rgba(0,0,0,.45);
+  }
+  .menu-card h2 {
+    margin: 0 0 24px;
+    font-size: clamp(36px, 7vw, 64px);
+  }
+  #playBtn {
+    min-width: 180px;
+    padding: 14px 30px;
+    font-size: 20px;
+    background: #16a34a;
+  }
+  #playBtn:hover { background: #15803d; }
+  #modeSelect p { margin: 0 0 18px; color: #cbd5e1; font-size: 18px; }
+  .modeChoice { min-width: 180px; margin: 6px; padding: 14px 24px; font-size: 19px; }
+  #cpuBtn { background: #2563eb; }
+  #cpuBtn:hover { background: #1d4ed8; }
+  #multiplayerBtn { background: #7c3aed; }
+  #multiplayerBtn:hover { background: #6d28d9; }
+  .aiChoice { min-width: 120px; margin: 6px; padding: 13px 20px; font-size: 18px; background: #2563eb; }
+  .aiChoice:hover { background: #1d4ed8; }
+  #backModeBtn { margin-top: 12px; background: #475569; }
+  #backModeBtn:hover { background: #64748b; }
+  .countdown-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+  }
+  #countdown {
+    font-size: clamp(64px, 13vw, 130px);
+    font-weight: 900;
+    text-shadow: 0 5px 18px rgba(0,0,0,.5);
+    transition: opacity .7s ease, transform .7s ease;
+  }
+  #countdown.fade-out {
+    opacity: 0;
+    transform: scale(1.06);
+  }
+
+  .mp-overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    place-items: center;
+    background: rgba(15,23,42,.72);
+    z-index: 20;
+  }
+  .mp-card {
+    width: min(520px, 88%);
+    padding: 28px;
+    border-radius: 18px;
+    background: rgba(15,23,42,.97);
+    box-shadow: 0 20px 60px rgba(0,0,0,.45);
+    text-align: center;
+  }
+  .mp-card h3 { margin: 0 0 8px; font-size: 30px; }
+  .mp-card p { color: #cbd5e1; margin: 8px 0 16px; }
+  .mp-actions { display:flex; justify-content:center; flex-wrap:wrap; gap:10px; }
+  .mp-card input {
+    width: min(360px, 100%);
+    padding: 12px 14px;
+    border-radius: 9px;
+    border: 1px solid #475569;
+    background: #0f172a;
+    color: white;
+    text-align: center;
+    font-size: 18px;
+    letter-spacing: 1px;
+  }
+  #roomCodeDisplay {
+    margin: 14px auto;
+    padding: 12px 16px;
+    width: fit-content;
+    max-width: 100%;
+    border-radius: 10px;
+    background: #1e293b;
+    font-family: monospace;
+    font-size: 17px;
+    word-break: break-all;
+    user-select: all;
+  }
+  #mpStatus { min-height: 24px; color: #facc15; font-weight: 700; }
+  .mp-small { font-size: 12px; color:#94a3b8; margin-top:12px; }
+
+
+#netDebugPanel{position:fixed;left:8px;bottom:8px;z-index:99999;background:rgba(5,12,24,.94);color:#d9f3ff;border:1px solid #48a9d6;border-radius:8px;padding:8px 10px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;max-width:min(520px,calc(100vw - 16px));white-space:pre-wrap;pointer-events:none;max-height:45vh;overflow:hidden;box-shadow:0 3px 14px #0008}
+
+</style>
+</head>
+<body>
+<div id="netDebugPanel">MP DEBUG: waiting for game…</div>
+<div id="menuOverlay" class="menu-overlay">
+  <div class="menu-card">
+    <h2>⚽ Circle Football</h2>
+    <div id="modeSelect">
+      <p>Choose how you want to play</p>
+      <div id="mainModeChoices">
+        <button id="cpuBtn" class="modeChoice" type="button">CPU</button>
+        <button id="multiplayerBtn" class="modeChoice" type="button">Multiplayer</button>
+      </div>
+      <div id="cpuChoices" style="display:none;">
+        <p>How many AI do you want to play against?</p>
+        <button class="aiChoice" data-ai="1" type="button">1 AI</button>
+        <button class="aiChoice" data-ai="2" type="button">2 AI</button>
+        <br>
+        <button id="backModeBtn" type="button">Back</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="multiplayerOverlay" class="mp-overlay">
+  <div class="mp-card">
+    <h3>🌐 Multiplayer</h3>
+    <div id="mpHome">
+      <p>Create a room and give the code to your opponent, or join an existing room.</p>
+      <div class="mp-actions">
+        <button id="createRoomBtn" type="button">Create Room</button>
+        <button id="joinRoomBtn" type="button">Join Room</button>
+      </div>
+      <br>
+      <button id="mpBackBtn" type="button">Back</button>
+    </div>
+    <div id="mpCreate" style="display:none;">
+      <p>Give this room code to your opponent:</p>
+      <div id="roomCodeDisplay">Generating...</div>
+      <div class="mp-actions">
+        <button id="copyRoomBtn" type="button">Copy Code</button>
+        <button id="cancelRoomBtn" type="button">Cancel</button>
+      </div>
+      <p id="mpStatus">Waiting for opponent...</p>
+    </div>
+    <div id="mpJoin" style="display:none;">
+      <p>Enter the room code from the host.</p>
+      <input id="roomCodeInput" maxlength="6" placeholder="6-character code" autocomplete="off">
+      <div class="mp-actions" style="margin-top:12px;">
+        <button id="connectRoomBtn" type="button">Connect</button>
+        <button id="cancelJoinBtn" type="button">Cancel</button>
+      </div>
+      <p id="mpJoinStatus">Not connected</p>
+    </div>
+    <div class="mp-small">Multiplayer is 1v1 for this first test.</div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1>⚽ Circle Football — Prototype</h1>
+      <div class="hint">WASD to move • Hold Space to charge • Release to shoot</div>
+    </div>
+    <div class="score-area"><div id="timer">1:30</div><div id="score">YOU 0 — 0 CPU</div></div>
+  </div>
+
+  <div class="game-shell">
+    <canvas id="game" width="960" height="540" tabindex="0"></canvas>
+
+    <div class="charge-wrap">
+      <div class="charge-label">SHOT POWER</div>
+      <div class="bar"><div id="charge"></div></div>
+    </div>
+
+    <div class="countdown-overlay">
+      <div id="countdown"></div>
+    </div>
+
+    <div class="message">
+      <div>
+        <div id="goalMessage">GOAL!</div>
+        <div id="fulltimeControls" class="fulltime-controls" style="display:none;">
+          <button id="playAgainBtn" type="button">Play Again?</button>
+          <button id="backMenuBtn" type="button">Back to Menu</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <span>Get around the ball and use your position to control the shot direction.</span>
+    <button id="reset">Reset Match</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+(() => {
+  "use strict";
+
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const scoreEl = document.getElementById("score");
+  const timerEl = document.getElementById("timer");
+  const chargeEl = document.getElementById("charge");
+  const goalMessage = document.getElementById("goalMessage");
+  const resetBtn = document.getElementById("reset");
+  const menuOverlay = document.getElementById("menuOverlay");
+  const modeSelect = document.getElementById("modeSelect");
+  const mainModeChoices = document.getElementById("mainModeChoices");
+  const cpuChoices = document.getElementById("cpuChoices");
+  const cpuBtn = document.getElementById("cpuBtn");
+  const multiplayerBtn = document.getElementById("multiplayerBtn");
+  const backModeBtn = document.getElementById("backModeBtn");
+  const aiChoices = document.querySelectorAll(".aiChoice");
+  const countdownEl = document.getElementById("countdown");
+  const fulltimeControls = document.getElementById("fulltimeControls");
+  const playAgainBtn = document.getElementById("playAgainBtn");
+  const backMenuBtn = document.getElementById("backMenuBtn");
+  const multiplayerOverlay = document.getElementById("multiplayerOverlay");
+  const mpHome = document.getElementById("mpHome");
+  const mpCreate = document.getElementById("mpCreate");
+  const mpJoin = document.getElementById("mpJoin");
+  const createRoomBtn = document.getElementById("createRoomBtn");
+  const joinRoomBtn = document.getElementById("joinRoomBtn");
+  const mpBackBtn = document.getElementById("mpBackBtn");
+  const copyRoomBtn = document.getElementById("copyRoomBtn");
+  const cancelRoomBtn = document.getElementById("cancelRoomBtn");
+  const connectRoomBtn = document.getElementById("connectRoomBtn");
+  const cancelJoinBtn = document.getElementById("cancelJoinBtn");
+  const roomCodeDisplay = document.getElementById("roomCodeDisplay");
+  const roomCodeInput = document.getElementById("roomCodeInput");
+  const mpStatus = document.getElementById("mpStatus");
+  const mpJoinStatus = document.getElementById("mpJoinStatus");
+
+  const W = canvas.width;
+  const H = canvas.height;
+
+  const field = {
+    left: 42,
+    right: W - 42,
+    top: 34,
+    bottom: H - 34,
+    goalDepth: 28,
+    goalHalf: 82
+  };
+
+  const keys = Object.create(null);
+
+  const player = {
+    x: 220, y: H / 2, r: 21,
+    speed: 3.65,
+    color: "#22c55e",
+    charge: 0
+  };
+
+  const cpu = {
+    x: W - 220, y: H / 2, r: 21,
+    speed: 3.65,
+    color: "#ef4444",
+    think: 0,
+    charging: false,
+    charge: 0,
+    shotCooldown: 0
+  };
+
+  const defender = {
+    x: W - 115, y: H / 2, r: 21,
+    speed: 2.65,
+    color: "#f97316"
+  };
+
+  const ball = {
+    x: W / 2, y: H / 2, r: 13,
+    vx: 0, vy: 0
+  };
+
+  let youScore = 0;
+  let cpuScore = 0;
+  let charging = false;
+  let charge = 0;
+  let lastTime = performance.now();
+  let resetTimer = 0;
+  let messageTimer = 0;
+  let gameStarted = false;
+  let aiCount = 1;
+  let countdownTimer = 0;
+  let goTimer = 0;
+  const MATCH_LENGTH = 90;
+  let matchTime = MATCH_LENGTH;
+  let matchOver = false;
+  let fulltimeFadeTimer = null;
+  let rematchReady = false;
+  let opponentRematchReady = false;
+  let matchEndAt = 0;
+  let networkClockOffset = 0;
+  let localInputSeq = 0;
+  let lastAuthoritativeSeq = 0;
+  let debugInputsSent = 0;
+  let debugInputsReceived = 0;
+  let debugInputsRejected = 0;
+  let debugSnapshotsSent = 0;
+  let debugSnapshotsReceived = 0;
+  let debugLastInput = "none";
+  let debugLastInputAt = 0;
+  let debugLastSnapshotAt = 0;
+  let debugLastSnapshotSentAt = 0;
+  let debugLastShoot = "none";
+  let debugLastRejected = "none";
+  let debugLastMessage = "page loaded";
+  let debugLocalMove = "not measured";
+  let debugRemoteMove = "not measured";
+  let debugLastFrameAt = 0;
+  let debugVisibilityChanges = 0;
+  let debugLastVisibility = "initial";
+  let debugHostAckSeq = 0;
+  let debugHostRemoteKeys = "not received yet";
+  let debugSnapshotSeq = 0;
+  let lastUpdateWall = performance.now();
+  let hostAuthorityLost = false;
+
+  // --- Online multiplayer state ---
+  let gameMode = "cpu"; // "cpu" or "multiplayer"
+  let multiplayerRole = null; // "host" or "guest"
+  let localSide = null; // "left" or "right"
+  let peer = null;
+  let connection = null;
+  let roomCode = "";
+  let networkReady = false;
+  let remoteSide = null;
+  let remoteInput = { w:false, a:false, s:false, d:false, up:false, down:false, left:false, right:false, space:false };
+  let remoteCharging = false;
+  let remoteCharge = 0;
+  let networkSendTimer = 0;
+  let networkInputTimer = 0;
+  const NETWORK_RATE = 1 / 30;
+  const ROOM_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+  function updateNetworkDebug() {
+    const el = document.getElementById("netDebugPanel");
+    if (!el) return;
+    const keyList = ["w","a","s","d","arrowup","arrowdown","arrowleft","arrowright"];
+    const localKeys = keyList.filter(k => keys[k]).join(",") || "none";
+    const remoteKeys = keyList.filter(k => remoteInput[k]).join(",") || "none";
+    const age = t => t ? (Math.max(0, (Date.now()-t)/1000)).toFixed(1)+"s ago" : "never";
+    const fmt = n => Number(n || 0).toFixed(0);
+    const leftEntity = player;
+    const rightEntity = cpu;
+    const connectionState = !connection ? "no connection" : (connection.open ? "open" : "connecting/closed");
+    const expectedDirection = multiplayerRole === "guest"
+      ? "INPUT: this guest -> host (received=0 here is normal)"
+      : multiplayerRole === "host"
+        ? "INPUT: guest -> this host (received must rise when guest presses keys)"
+        : "INPUT direction: waiting for role";
+    const snapshotDirection = multiplayerRole === "host"
+      ? "SNAPSHOT: this host -> guest"
+      : multiplayerRole === "guest"
+        ? "SNAPSHOT: host -> this guest (received must rise while host tab is running)"
+        : "SNAPSHOT direction: waiting for role";
+    el.textContent =
+      `MP DEBUG v5 | mode=${gameMode} tab=${document.visibilityState}\n` +
+      `role=${multiplayerRole || "none"} local=${localSide || "?"} remote=${remoteSide || "?"} ready=${networkReady} conn=${connectionState}\n` +
+      `gameStarted=${gameStarted} countdown=${countdownTimer.toFixed(2)} reset=${resetTimer.toFixed(2)}\n` +
+      `${expectedDirection}\n` +
+      `INPUT sent=${debugInputsSent} host-accepted=${multiplayerRole === "host" ? debugInputsReceived : "see host tab"} rejected=${debugInputsRejected}\n` +
+      `last input: ${debugLastInput} (${age(debugLastInputAt)})\n` +
+      `local keys=${localKeys} | remote keys=${remoteKeys}\n` +
+      `move Δ/frame: local=${debugLocalMove} remote=${debugRemoteMove}\n` +
+      `GREEN x=${fmt(leftEntity.x)} y=${fmt(leftEntity.y)} | RED x=${fmt(rightEntity.x)} y=${fmt(rightEntity.y)}\n` +
+      `${snapshotDirection}\n` +
+      `snapshots sent=${debugSnapshotsSent} (last ${age(debugLastSnapshotSentAt)})\n` +
+      `snapshots received=${debugSnapshotsReceived} (last ${age(debugLastSnapshotAt)}) seq=${debugSnapshotSeq}\n` +
+      `host ack input seq=${multiplayerRole === "guest" ? debugHostAckSeq : "n/a"} host remote keys=${debugHostRemoteKeys}\n` +
+      `last shoot=${debugLastShoot}\n` +
+      `last rejected=${debugLastRejected}\n` +
+      `visibility changes=${debugVisibilityChanges} last=${debugLastVisibility}\n` +
+      `last network event=${debugLastMessage}`;
+  }
+
+  function randomRoomCode() {
+    let code = "";
+    for (let i = 0; i < 6; i++) code += ROOM_CHARS[Math.floor(Math.random() * ROOM_CHARS.length)];
+    return code;
+  }
+
+  function controlledEntity() {
+    return localSide === "right" ? cpu : player;
+  }
+
+  function remoteEntity() {
+    return localSide === "right" ? player : cpu;
+  }
+
+  function inputForSide(side) {
+    if (side === localSide) {
+      return keys;
+    }
+    return remoteInput;
+  }
+
+  function setMultiplayerScoreText() {
+    const myScore = localSide === "right" ? cpuScore : youScore;
+    const opponentScore = localSide === "right" ? youScore : cpuScore;
+    scoreEl.textContent = `YOU ${myScore} — ${opponentScore} OPPONENT`;
+  }
+
+  function setMultiplayerMessage(text) {
+    mpStatus.textContent = text;
+    mpJoinStatus.textContent = text;
+  }
+
+  function closeNetwork() {
+    networkReady = false;
+    multiplayerRole = null;
+    localSide = null;
+    remoteSide = null;
+    remoteInput = { w:false, a:false, s:false, d:false, up:false, down:false, left:false, right:false, space:false };
+    remoteCharging = false;
+    remoteCharge = 0;
+    networkSendTimer = 0;
+    networkInputTimer = 0;
+    if (connection) {
+      try { connection.close(); } catch (_) {}
+      connection = null;
+    }
+    if (peer) {
+      try { peer.destroy(); } catch (_) {}
+      peer = null;
+    }
+    roomCode = "";
+  }
+
+  function showMultiplayerHome() {
+    gameMode = "multiplayer";
+    menuOverlay.style.display = "none";
+    multiplayerOverlay.style.display = "grid";
+    mpHome.style.display = "block";
+    mpCreate.style.display = "none";
+    mpJoin.style.display = "none";
+  }
+
+  function showMpCreate() {
+    mpHome.style.display = "none";
+    mpCreate.style.display = "block";
+    mpJoin.style.display = "none";
+  }
+
+  function showMpJoin() {
+    mpHome.style.display = "none";
+    mpCreate.style.display = "none";
+    mpJoin.style.display = "block";
+    roomCodeInput.focus();
+  }
+
+  function enterMultiplayerMatch(authoritativeEndAt = null, authoritativeServerNow = null) {
+    rematchReady = false;
+    opponentRematchReady = false;
+    gameMode = "multiplayer";
+    aiCount = 1;
+    youScore = 0;
+    cpuScore = 0;
+    resetPositions();
+    countdownTimer = 3.0;
+    goTimer = 0;
+    matchTime = MATCH_LENGTH;
+    matchEndAt = authoritativeEndAt || (Date.now() + MATCH_LENGTH * 1000);
+    networkClockOffset = authoritativeServerNow === null
+      ? 0
+      : authoritativeServerNow - Date.now();
+    hostAuthorityLost = false;
+    matchOver = false;
+    resetTimer = 0;
+    messageTimer = 0;
+    fulltimeControls.style.display = "none";
+    goalMessage.classList.remove("show", "fade-out");
+    countdownEl.classList.remove("fade-out");
+    countdownEl.style.opacity = "1";
+    countdownEl.textContent = "3";
+    updateTimerDisplay();
+    setMultiplayerScoreText();
+    multiplayerOverlay.style.display = "none";
+    menuOverlay.style.display = "none";
+    gameStarted = true;
+    canvas.focus();
+  }
+
+  function hostStartMultiplayer() {
+    // Use a fixed, explicit side assignment so input ownership cannot depend
+    // on which browser happened to get which random side.
+    localSide = "left";       // Host is always GREEN / left.
+    remoteSide = "right";    // Guest is always RED / right.
+    remoteInput = { w:false, a:false, s:false, d:false, up:false, down:false, left:false, right:false,
+                    arrowup:false, arrowdown:false, arrowleft:false, arrowright:false };
+    localInputSeq = 0;
+    lastAuthoritativeSeq = 0;
+    debugInputsSent = debugInputsReceived = debugInputsRejected = 0;
+    debugSnapshotsSent = debugSnapshotsReceived = 0;
+    debugLastInput = "none";
+    debugLastInputAt = debugLastSnapshotAt = debugLastSnapshotSentAt = 0;
+    debugLastRejected = "none";
+    debugLastMessage = "host starting match";
+    debugLocalMove = debugRemoteMove = "not measured";
+    networkReady = true;
+    const serverNow = Date.now();
+    const authoritativeEndAt = serverNow + MATCH_LENGTH * 1000;
+    connection.send({ type:"assign", side: remoteSide });
+    connection.send({ type:"start", side: remoteSide, matchEndAt: authoritativeEndAt, serverNow });
+    enterMultiplayerMatch(authoritativeEndAt, serverNow);
+    mpStatus.textContent = "Connected! You are GREEN.";
+  }
+
+  function setupConnection(conn, role) {
+    connection = conn;
+    multiplayerRole = role;
+    debugLastMessage = `${role} connection set up`;
+
+    connection.on("open", () => {
+      networkReady = true;
+      debugLastMessage = `${role} connection open`;
+      if (role === "guest") {
+        mpJoinStatus.textContent = "Connected. Waiting for host...";
+        connection.send({ type:"hello" });
+      } else {
+        mpStatus.textContent = "Opponent connected. Starting match...";
+      }
+    });
+
+    connection.on("data", (msg) => {
+      if (!msg || typeof msg !== "object") {
+        debugLastMessage = `${role} received invalid message`;
+        return;
+      }
+      debugLastMessage = `${role} received ${msg.type || "unknown"}`;
+
+      if (msg.type === "hello" && role === "host") {
+        hostStartMultiplayer();
+        return;
+      }
+
+      if (msg.type === "assign" && role === "guest") {
+        localSide = msg.side === "left" || msg.side === "right" ? msg.side : null;
+        remoteSide = localSide === "left" ? "right" : (localSide === "right" ? "left" : null);
+        debugLastMessage = `guest assigned side=${localSide || "INVALID"}`;
+        networkReady = true;
+        mpJoinStatus.textContent = `Connected! You are ${localSide === "left" ? "GREEN" : "RED"}.`;
+        return;
+      }
+
+      if (msg.type === "start" && role === "guest") {
+        // Reset per-match diagnostics only at match start, never on tab switches.
+        debugInputsSent = debugInputsReceived = debugInputsRejected = 0;
+        debugSnapshotsSent = debugSnapshotsReceived = 0;
+        debugLastInputAt = debugLastSnapshotAt = debugLastSnapshotSentAt = 0;
+        debugHostAckSeq = 0;
+        debugSnapshotSeq = 0;
+        debugLastInput = "none";
+        debugHostRemoteKeys = "waiting for first host snapshot";
+        localSide = msg.side === "left" || msg.side === "right" ? msg.side : "right";
+        remoteSide = localSide === "left" ? "right" : "left";
+        debugLastMessage = `guest start side=${localSide}`;
+        localInputSeq = 0;
+        keys.w = keys.a = keys.s = keys.d = false;
+        keys.arrowup = keys.arrowdown = keys.arrowleft = keys.arrowright = false;
+        enterMultiplayerMatch(
+          Number(msg.matchEndAt) || null,
+          Number(msg.serverNow) || Date.now()
+        );
+        return;
+      }
+
+      if (msg.type === "host_closing" && role === "guest") {
+        hostAuthorityLost = true;
+        networkReady = false;
+        multiplayerRole = "guest";
+        if (msg.matchEndAt) matchEndAt = msg.matchEndAt;
+        mpJoinStatus.textContent = "Host left. Match state is preserved locally.";
+        return;
+      }
+
+      if (msg.type === "input" && role === "host") {
+        // Count every input packet before validation so the panel reveals routing mismatches.
+        if (msg.side !== remoteSide || !msg.keys || typeof msg.keys !== "object") {
+          debugInputsRejected++;
+          debugLastRejected = `side=${msg.side} expected=${remoteSide} keys=${!!msg.keys}`;
+          debugLastMessage = "rejected guest input";
+          return;
+        }
+        debugInputsReceived++;
+        debugLastInputAt = Date.now();
+        const pressed = ["w","a","s","d","arrowup","arrowdown","arrowleft","arrowright"].filter(k => msg.keys[k]).join(",") || "none";
+        debugLastInput = `side=${msg.side} seq=${msg.seq ?? "?"} keys=${pressed}`;
+        remoteInput = {
+          w:!!msg.keys.w, a:!!msg.keys.a, s:!!msg.keys.s, d:!!msg.keys.d,
+          up:!!msg.keys.up, down:!!msg.keys.down, left:!!msg.keys.left, right:!!msg.keys.right,
+          arrowup:!!msg.keys.arrowup, arrowdown:!!msg.keys.arrowdown,
+          arrowleft:!!msg.keys.arrowleft, arrowright:!!msg.keys.arrowright
+        };
+        if (msg.seq) lastAuthoritativeSeq = Math.max(lastAuthoritativeSeq, Number(msg.seq) || 0);
+        remoteCharging = !!msg.charging;
+        remoteCharge = clamp(Number(msg.charge) || 0, 0, 1);
+        const remoteEntity = remoteSide === "left" ? player : cpu;
+        remoteEntity.charge = remoteCharge;
+        return;
+      }
+
+      if (msg.type === "shoot" && role === "host") {
+        // Host remains authoritative; report whether the requested shot registered.
+        const side = msg.side === "left" || msg.side === "right" ? msg.side : remoteSide;
+        const entity = side === "left" ? player : cpu;
+        const amount = clamp(Number(msg.charge) || 0, 0, 1);
+        const accepted = !!side && performShot(entity, amount);
+        debugLastShoot = `request side=${side} accepted=${accepted} charge=${amount.toFixed(2)}`;
+        debugLastMessage = `host shoot request side=${side} accepted=${accepted}`;
+        if (accepted) {
+          entity.charge = 0;
+          if (side === remoteSide) remoteCharging = false;
+        }
+        if (connection && networkReady) connection.send({
+          type: "shoot_result", accepted, side, charge: entity.charge,
+          ball: {x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy},
+          player: {x: player.x, y: player.y}, cpu: {x: cpu.x, y: cpu.y}
+        });
+        return;
+      }
+
+      if (msg.type === "shoot_result" && role === "guest") {
+        debugLastShoot = `result side=${msg.side} accepted=${!!msg.accepted}`;
+        debugLastMessage = `guest received shoot result accepted=${!!msg.accepted}`;
+        if (msg.player) { player.x = msg.player.x; player.y = msg.player.y; }
+        if (msg.cpu) { cpu.x = msg.cpu.x; cpu.y = msg.cpu.y; }
+        if (msg.ball) {
+          ball.x = msg.ball.x; ball.y = msg.ball.y;
+          ball.vx = msg.ball.vx; ball.vy = msg.ball.vy;
+        }
+        const entity = localSide === "left" ? player : cpu;
+        entity.charge = clamp(Number(msg.charge) || 0, 0, 1);
+        charge = entity.charge;
+        chargeEl.style.width = `${entity.charge * 100}%`;
+        if (!msg.accepted) mpJoinStatus.textContent = "Shot didn't register—get a little closer and try again.";
+        else mpJoinStatus.textContent = `Connected! You are ${localSide === "left" ? "GREEN" : "RED"}.`;
+        return;
+      }
+
+      if (msg.type === "snapshot" && role === "guest") {
+        debugSnapshotsReceived++;
+        debugLastSnapshotAt = Date.now();
+        debugSnapshotSeq = Number(msg.snapshotSeq) || debugSnapshotsReceived;
+        debugHostAckSeq = Number(msg.lastInputSeq) || 0;
+        if (msg.remoteInput && typeof msg.remoteInput === "object") {
+          debugHostRemoteKeys = ["w","a","s","d","arrowup","arrowdown","arrowleft","arrowright"]
+            .filter(k => msg.remoteInput[k]).join(",") || "none";
+        }
+        const localBefore = localSide === "left" ? player : cpu;
+        const oldLocalX = localBefore.x, oldLocalY = localBefore.y;
+        player.x = msg.player.x; player.y = msg.player.y;
+        cpu.x = msg.cpu.x; cpu.y = msg.cpu.y;
+        const localAfter = localSide === "left" ? player : cpu;
+        debugLocalMove = `snapshot Δ ${Math.hypot(localAfter.x-oldLocalX, localAfter.y-oldLocalY).toFixed(2)} px`;
+        ball.x = msg.ball.x; ball.y = msg.ball.y;
+        ball.vx = msg.ball.vx; ball.vy = msg.ball.vy;
+        youScore = msg.leftScore !== undefined ? msg.leftScore : msg.youScore;
+        cpuScore = msg.rightScore !== undefined ? msg.rightScore : msg.cpuScore;
+        if (msg.serverNow) networkClockOffset = Number(msg.serverNow) - Date.now();
+        if (msg.matchEndAt) matchEndAt = Number(msg.matchEndAt);
+        matchTime = msg.matchTime;
+        if (matchEndAt) matchTime = Math.max(0, (matchEndAt - (Date.now() + networkClockOffset)) / 1000);
+        matchOver = msg.matchOver;
+        countdownTimer = msg.countdownTimer;
+        goTimer = msg.goTimer;
+        resetTimer = msg.resetTimer;
+        remoteCharge = msg.remoteCharge || 0;
+        player.charge = msg.leftCharge || 0;
+        cpu.charge = msg.rightCharge || 0;
+        charge = localSide === "left" ? player.charge : cpu.charge;
+        updateTimerDisplay();
+        setMultiplayerScoreText();
+        chargeEl.style.width = `${charge * 100}%`;
+        if (msg.countdownText !== undefined) countdownEl.textContent = msg.countdownText;
+        if (msg.goalText) {
+          goalMessage.textContent = msg.goalText;
+          goalMessage.classList.add("show");
+          messageTimer = 0.5;
+        }
+        if (msg.matchOver) {
+          goalMessage.textContent = msg.resultText;
+          goalMessage.classList.add("show");
+          fulltimeControls.style.display = "flex";
+        }
+      }
+
+      if (msg.type === "rematch_ready" && role === "host") {
+        opponentRematchReady = true;
+        if (rematchReady) startNetworkRematch();
+        else goalMessage.textContent = "WAITING FOR HOST...";
+        return;
+      }
+
+      if (msg.type === "rematch_start" && role === "guest") {
+        rematchReady = false;
+        opponentRematchReady = false;
+        resetMatch();
+        gameStarted = true;
+        countdownTimer = 3.0;
+        goTimer = 0;
+        matchTime = MATCH_LENGTH;
+        networkClockOffset = (Number(msg.serverNow) || Date.now()) - Date.now();
+        matchEndAt = Number(msg.matchEndAt) || (Date.now() + MATCH_LENGTH * 1000);
+        matchOver = false;
+        countdownEl.textContent = "3";
+        fulltimeControls.style.display = "none";
+        return;
+      }
+
+      if (msg.type === "disconnect") {
+        networkReady = false;
+        matchOver = true;
+        goalMessage.textContent = "OPPONENT LEFT";
+        goalMessage.classList.add("show");
+      }
+    });
+
+    connection.on("close", () => {
+      debugLastMessage = `${role} connection closed`;
+      if (gameStarted && !matchOver) {
+        networkReady = false;
+        matchOver = true;
+        goalMessage.textContent = "OPPONENT LEFT";
+        goalMessage.classList.add("show");
+      }
+      mpStatus.textContent = "Connection closed.";
+      mpJoinStatus.textContent = "Connection closed.";
+    });
+
+    connection.on("error", (err) => {
+      const message = err && err.message ? err.message : "Connection error.";
+      debugLastMessage = `${role} connection error: ${message}`;
+      mpStatus.textContent = message;
+      mpJoinStatus.textContent = message;
+    });
+  }
+
+  function createRoom() {
+    closeNetwork();
+    showMpCreate();
+    mpStatus.textContent = "Connecting...";
+    roomCode = randomRoomCode();
+    peer = new Peer(roomCode);
+
+    peer.on("open", id => {
+      roomCode = id;
+      roomCodeDisplay.textContent = id;
+      mpStatus.textContent = "Waiting for opponent...";
+    });
+    peer.on("connection", conn => {
+      if (connection) {
+        try { conn.close(); } catch (_) {}
+        return;
+      }
+      setupConnection(conn, "host");
+    });
+    peer.on("error", err => {
+      if (err && err.type === "unavailable-id") {
+        // Try another short code if a rare collision occurs.
+        createRoom();
+        return;
+      }
+      debugLastMessage = `room error ${err?.type || err?.message || "unknown"}`;
+      mpStatus.textContent = `Room error: ${err?.message || err?.type || "unknown"}`;
+    });
+  }
+
+  function joinRoom() {
+    const code = roomCodeInput.value.trim().toUpperCase();
+    if (code.length !== 6) {
+      mpJoinStatus.textContent = "Enter the 6-character room code.";
+      return;
+    }
+    closeNetwork();
+    showMpJoin();
+    mpJoinStatus.textContent = "Connecting...";
+    peer = new Peer();
+    peer.on("open", () => {
+      const conn = peer.connect(code, { reliable:true });
+      setupConnection(conn, "guest");
+    });
+    peer.on("error", err => {
+      debugLastMessage = `join error ${err?.type || err?.message || "unknown"}`;
+      mpJoinStatus.textContent = `Connection error: ${err?.message || err?.type || "unknown"}`;
+    });
+  }
+
+  function startNetworkRematch() {
+    if (multiplayerRole !== "host" || !connection || !networkReady) return;
+    rematchReady = false;
+    opponentRematchReady = false;
+    resetMatch();
+    gameStarted = true;
+    countdownTimer = 3.0;
+    goTimer = 0;
+    matchTime = MATCH_LENGTH;
+    matchEndAt = Date.now() + MATCH_LENGTH * 1000;
+    matchOver = false;
+    countdownEl.textContent = "3";
+    fulltimeControls.style.display = "none";
+    connection.send({type:"rematch_start", matchEndAt, serverNow: Date.now()});
+  }
+
+  function sendLocalInput() {
+    if (!connection || !networkReady || multiplayerRole !== "guest") {
+      debugLastMessage = `input not sent: conn=${!!connection} ready=${networkReady} role=${multiplayerRole}`;
+      return;
+    }
+    const relevant = {};
+    for (const key of ["w","a","s","d","arrowup","arrowdown","arrowleft","arrowright"]) {
+      relevant[key] = !!keys[key];
+    }
+    relevant.up = relevant.arrowup;
+    relevant.down = relevant.arrowdown;
+    relevant.left = relevant.arrowleft;
+    relevant.right = relevant.arrowright;
+    const seq = ++localInputSeq;
+    connection.send({
+      type:"input",
+      side: localSide,
+      keys: relevant,
+      charging,
+      charge: localSide === "left" ? player.charge : cpu.charge,
+      seq
+    });
+    debugInputsSent++;
+    debugLastInputAt = Date.now();
+    const pressed = Object.keys(relevant).filter(k => relevant[k]).join(",") || "none";
+    debugLastInput = `sent side=${localSide} seq=${seq} keys=${pressed}`;
+  }
+
+  function sendHostSnapshot(goalText = "") {
+    if (!connection || !networkReady || multiplayerRole !== "host") return;
+    const myScore = youScore;
+    const oppScore = cpuScore;
+    let resultText = "";
+    if (matchOver) {
+      const my = localSide === "left" ? myScore : oppScore;
+      const opp = localSide === "left" ? oppScore : myScore;
+      resultText = my === opp ? "DRAW!" : (my > opp ? "YOU WIN! 🏆" : "OPPONENT WINS!");
+    }
+    connection.send({
+      type:"snapshot",
+      snapshotSeq: debugSnapshotsSent + 1,
+      lastInputSeq: lastAuthoritativeSeq,
+      remoteSide,
+      remoteInput: { ...remoteInput },
+      serverNow: Date.now(),
+      player:{x:player.x,y:player.y},
+      cpu:{x:cpu.x,y:cpu.y},
+      ball:{x:ball.x,y:ball.y,vx:ball.vx,vy:ball.vy},
+      youScore, cpuScore, leftScore: youScore, rightScore: cpuScore,
+      matchTime, matchEndAt, matchOver, countdownTimer, goTimer, resetTimer,
+      leftCharge: player.charge,
+      rightCharge: cpu.charge,
+      countdownText: countdownEl.textContent,
+      goalText,
+      resultText
+    });
+    debugSnapshotsSent++;
+    debugLastSnapshotSentAt = Date.now();
+  }
+
+  function showMenu() {
+    rematchReady = false;
+    opponentRematchReady = false;
+    closeNetwork();
+    gameMode = "cpu";
+    multiplayerOverlay.style.display = "none";
+    gameStarted = false;
+    matchOver = false;
+    mainModeChoices.style.display = "block";
+    cpuChoices.style.display = "none";
+    if (fulltimeFadeTimer) {
+      clearTimeout(fulltimeFadeTimer);
+      fulltimeFadeTimer = null;
+    }
+    countdownEl.classList.remove("fade-out");
+    countdownEl.style.opacity = "1";
+    fulltimeControls.style.display = "none";
+    goalMessage.classList.remove("show", "fade-out");
+    countdownEl.textContent = "";
+    menuOverlay.style.display = "grid";
+  }
+
+  const MAX_CHARGE = 1;
+  const CHARGE_RATE = 0.75;
+  const MIN_SHOT = 4.0;
+  const MAX_SHOT = 10.5;
+  const BALL_FRICTION = 0.985;
+  const BALL_MAX_SPEED = 13;
+  const CPU_CHARGE_RATE = 1.5;
+  const CPU_MIN_SHOT = 5.5;
+  const CPU_MAX_SHOT = 10.5;
+  const CPU_SHOT_COOLDOWN = 0.7;
+
+  function clamp(v, min, max) {
+    return Math.max(min, Math.min(max, v));
+  }
+
+  function distance(ax, ay, bx, by) {
+    return Math.hypot(bx - ax, by - ay);
+  }
+
+  function touching(a, b) {
+    return distance(a.x, a.y, b.x, b.y) <= a.r + b.r + 5.0;
+  }
+
+  function updateTimerDisplay() {
+    const totalSeconds = Math.max(0, Math.ceil(matchTime));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = String(totalSeconds % 60).padStart(2, "0");
+    timerEl.textContent = `${minutes}:${seconds}`;
+  }
+
+  function resetPositions() {
+    resetTimer = 0;
+    player.x = 220;
+    player.y = H / 2;
+    cpu.x = W - 220;
+    cpu.y = H / 2;
+    defender.x = W - 115;
+    defender.y = H / 2;
+    ball.x = W / 2;
+    ball.y = H / 2;
+    ball.vx = 0;
+    ball.vy = 0;
+    player.charge = 0;
+    cpu.charge = 0;
+    charge = 0;
+    charging = false;
+    chargeEl.style.width = "0%";
+    cpu.charging = false;
+    cpu.shotCooldown = 0;
+    player.__mpCharging = false;
+    cpu.__mpCharging = false;
+  }
+
+  function startMatch(selectedAI) {
+    closeNetwork();
+    gameMode = "cpu";
+    aiCount = selectedAI;
+    resetMatch();
+    menuOverlay.style.display = "none";
+    gameStarted = true;
+    countdownTimer = 3.0;
+    goTimer = 0;
+    matchTime = MATCH_LENGTH;
+    matchOver = false;
+    updateTimerDisplay();
+    countdownEl.textContent = "3";
+    canvas.focus();
+  }
+
+  function resetMatch() {
+    youScore = 0;
+    cpuScore = 0;
+    scoreEl.textContent = gameMode === "multiplayer" ? "YOU 0 — 0 OPPONENT" : (aiCount === 2 ? "YOU 0 — 0 AI" : "YOU 0 — 0 CPU");
+    resetPositions();
+    countdownTimer = 0;
+    goTimer = 0;
+    if (fulltimeFadeTimer) {
+      clearTimeout(fulltimeFadeTimer);
+      fulltimeFadeTimer = null;
+    }
+    countdownEl.classList.remove("fade-out");
+    countdownEl.style.opacity = "1";
+    countdownEl.textContent = "";
+    goalMessage.classList.remove("show", "fade-out");
+    fulltimeControls.style.display = "none";
+    messageTimer = 0;
+    matchTime = MATCH_LENGTH;
+    matchOver = false;
+    updateTimerDisplay();
+  }
+
+  function showGoal(text) {
+    goalMessage.textContent = text;
+    goalMessage.classList.add("show");
+    messageTimer = 0.85;
+  }
+
+  function endMatch() {
+    rematchReady = false;
+    opponentRematchReady = false;
+    matchTime = 0;
+    matchOver = true;
+    countdownEl.textContent = "FULL TIME!";
+    countdownEl.classList.remove("fade-out");
+    countdownEl.style.opacity = "1";
+    if (fulltimeFadeTimer) clearTimeout(fulltimeFadeTimer);
+    fulltimeFadeTimer = setTimeout(() => {
+      countdownEl.classList.add("fade-out");
+      // Remove the text after the CSS fade finishes so FULL TIME cannot
+      // cover the result buttons or remain in the game overlay.
+      fulltimeFadeTimer = setTimeout(() => {
+        countdownEl.textContent = "";
+        countdownEl.classList.remove("fade-out");
+        fulltimeFadeTimer = null;
+      }, 750);
+    }, 700);
+    const myScore = gameMode === "multiplayer" && localSide === "right" ? cpuScore : youScore;
+    const opponentScore = gameMode === "multiplayer" && localSide === "right" ? youScore : cpuScore;
+    goalMessage.textContent = myScore === opponentScore
+      ? "DRAW!"
+      : (myScore > opponentScore ? "YOU WIN! 🏆" : (gameMode === "multiplayer" ? "OPPONENT WINS!" : "AI WINS!"));
+    goalMessage.classList.remove("fade-out");
+    goalMessage.classList.add("show");
+    fulltimeControls.style.display = "flex";
+    messageTimer = 999999;
+    player.charge = 0;
+    cpu.charge = 0;
+    charge = 0;
+    charging = false;
+    chargeEl.style.width = "0%";
+    ball.vx = ball.vy = 0;
+  }
+
+  function scoreGoal(scoringSide) {
+    // Lock scoring immediately. Physics can call this at the back of the net
+    // on consecutive frames if the ball remains there; the cooldown guarantees
+    // exactly one point per goal entry.
+    if (matchOver || resetTimer > 0) return;
+    resetTimer = 1.25;
+    ball.vx = 0;
+    ball.vy = 0;
+    player.charge = 0;
+    cpu.charge = 0;
+    charge = 0;
+    charging = false;
+
+    // scoringSide is the GOAL that was entered, not the player who scored.
+    // Entering the LEFT goal means RED scored; entering the RIGHT goal means
+    // GREEN scored. Keeping this tied to field side prevents host/guest
+    // perspective from ever swapping the point.
+    const scoringTeam = scoringSide === "left" ? "right" : "left";
+    if (scoringTeam === "left") youScore++;
+    else cpuScore++;
+
+    if (gameMode === "multiplayer") {
+      setMultiplayerScoreText();
+    } else {
+      scoreEl.textContent = aiCount === 2
+        ? `YOU ${youScore} — ${cpuScore} AI`
+        : `YOU ${youScore} — ${cpuScore} CPU`;
+    }
+
+    const youScored = gameMode === "multiplayer"
+      ? scoringTeam === localSide
+      : scoringTeam === "left";
+
+    const goalText = youScored
+      ? "GOAL! ⚽"
+      : (gameMode === "multiplayer" ? "OPPONENT SCORES!" : "CPU SCORES!");
+    showGoal(goalText);
+    player.charge = 0;
+    cpu.charge = 0;
+    charge = 0;
+    charging = false
+    charging = false;
+    cpu.charge = 0;
+    cpu.charging = false;
+
+    if (gameMode === "multiplayer" && multiplayerRole === "host") {
+      sendHostSnapshot(goalText);
+    }
+  }
+
+  function performShot(entity, amount) {
+    // Networked players can be a few pixels apart between tabs. A larger
+    // kick range lets the authoritative host accept a legitimate kick even
+    // when the guest's visual position is slightly ahead/behind.
+    const kickRange = entity.r + ball.r + (gameMode === "multiplayer" ? 30 : 0);
+    if (distance(entity.x, entity.y, ball.x, ball.y) > kickRange) return false;
+
+    let dx = ball.x - entity.x;
+    let dy = ball.y - entity.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 0.001) {
+      dx = entity === player ? 1 : -1;
+      dy = 0;
+    } else {
+      dx /= len;
+      dy /= len;
+    }
+
+    const power = MIN_SHOT + (MAX_SHOT - MIN_SHOT) * amount;
+    ball.vx = dx * power;
+    ball.vy = dy * power;
+    ball.x = entity.x + dx * (entity.r + ball.r + 2);
+    ball.y = entity.y + dy * (entity.r + ball.r + 2);
+    return true;
+  }
+
+  function shoot() {
+    debugLastShoot = `attempt by ${localSide || "?"}`;
+    if (gameMode === "multiplayer") {
+      const entity = localSide === "left" ? player : cpu;
+      if (multiplayerRole === "guest") {
+        if (connection && networkReady) {
+          connection.send({ type:"shoot", side: localSide, charge: entity.charge });
+          debugLastShoot = `sent request side=${localSide} charge=${entity.charge.toFixed(2)}`;
+          debugLastMessage = "guest sent shoot request";
+        } else {
+          debugLastShoot = "shoot blocked: connection not ready";
+        }
+        entity.charge = 0;
+        chargeEl.style.width = "0%";
+        return;
+      }
+      const accepted = performShot(entity, entity.charge);
+      debugLastShoot = `host-local side=${localSide} accepted=${accepted}`;
+      entity.charge = 0;
+      return;
+    }
+
+    if (!touching(player, ball)) {
+      charge = 0;
+      chargeEl.style.width = "0%";
+      return;
+    }
+    performShot(player, charge);
+    charge = 0;
+    chargeEl.style.width = "0%";
+  }
+
+  function inGoalMouth(y) {
+    return y > H / 2 - field.goalHalf && y < H / 2 + field.goalHalf;
+  }
+
+  function clampPlayerToField(entity) {
+    // Players can enter the goal mouth, but cannot pass through the back of the goal.
+    const leftMin = inGoalMouth(entity.y) ? field.left - field.goalDepth + entity.r : field.left + entity.r;
+    const rightMax = inGoalMouth(entity.y) ? field.right + field.goalDepth - entity.r : field.right - entity.r;
+    entity.x = clamp(entity.x, leftMin, rightMax);
+    entity.y = clamp(entity.y, field.top + entity.r, field.bottom - entity.r);
+  }
+
+  function resolveBallPlayerCollision(circle) {
+    let dx = ball.x - circle.x;
+    let dy = ball.y - circle.y;
+    let len = Math.hypot(dx, dy);
+    const minDist = circle.r + ball.r;
+    if (len >= minDist) return;
+
+    if (len < 0.001) {
+      dx = circle === player ? 1 : -1;
+      dy = 0;
+      len = 1;
+    }
+
+    dx /= len;
+    dy /= len;
+
+    // Separate the ball completely so it cannot remain inside a player.
+    ball.x = circle.x + dx * (minDist + 0.2);
+    ball.y = circle.y + dy * (minDist + 0.2);
+
+    // If the ball is moving into the player, reflect that component outward.
+    const towardPlayer = ball.vx * dx + ball.vy * dy;
+    if (towardPlayer < 0) {
+      ball.vx -= 1.7 * towardPlayer * dx;
+      ball.vy -= 1.7 * towardPlayer * dy;
+    }
+  }
+
+  function moveEntity(entity, input, dt) {
+    let dx = 0, dy = 0;
+    if (input.w || input.up || input.arrowup) dy -= 1;
+    if (input.s || input.down || input.arrowdown) dy += 1;
+    if (input.a || input.left || input.arrowleft) dx -= 1;
+    if (input.d || input.right || input.arrowright) dx += 1;
+    const len = Math.hypot(dx, dy);
+    if (len > 0) {
+      dx /= len;
+      dy /= len;
+      entity.x += dx * entity.speed * dt * 60;
+      entity.y += dy * entity.speed * dt * 60;
+    }
+    clampPlayerToField(entity);
+  }
+
+  function movePlayer(dt) {
+    if (gameMode === "multiplayer") {
+      // ONLY the host advances authoritative player positions. The guest never
+      // simulates a second version of the match, which prevents ball contact
+      // from accidentally making one side appear to "own" the game.
+      if (multiplayerRole === "host") {
+        const localEntity = localSide === "left" ? player : cpu;
+        const remoteEntity = remoteSide === "left" ? player : cpu;
+        const lx = localEntity.x, ly = localEntity.y;
+        const rx = remoteEntity.x, ry = remoteEntity.y;
+        moveEntity(localEntity, keys, dt);
+        moveEntity(remoteEntity, remoteInput, dt);
+        debugLocalMove = `${Math.hypot(localEntity.x-lx, localEntity.y-ly).toFixed(2)} px`;
+        debugRemoteMove = `${Math.hypot(remoteEntity.x-rx, remoteEntity.y-ry).toFixed(2)} px`;
+      }
+      return;
+    }
+    moveEntity(player, keys, dt);
+  }
+
+  function moveCPU(dt) {
+    cpu.shotCooldown = Math.max(0, cpu.shotCooldown - dt);
+
+    // The CPU attacks the LEFT goal. It must physically get to a reachable
+    // position on the RIGHT side of the ball before it can shoot.
+    const goalX = field.left;
+    const goalY = H / 2;
+    const contactDistance = cpu.r + ball.r + 3;
+    const mouth = inGoalMouth(ball.y);
+
+    let gx = goalX - ball.x;
+    let gy = goalY - ball.y;
+    const glen = Math.hypot(gx, gy) || 1;
+    gx /= glen;
+    gy /= glen;
+
+    // Where the CPU would ideally stand to kick toward the left goal.
+    const idealX = ball.x - gx * contactDistance;
+    const idealY = ball.y - gy * contactDistance;
+
+    const minX = mouth
+      ? field.left - field.goalDepth + cpu.r
+      : field.left + cpu.r;
+    const maxX = mouth
+      ? field.right + field.goalDepth - cpu.r
+      : field.right - cpu.r;
+    const minY = field.top + cpu.r;
+    const maxY = field.bottom - cpu.r;
+
+    const idealReachable =
+      idealX >= minX && idealX <= maxX &&
+      idealY >= minY && idealY <= maxY;
+
+    // Near the left goal, always prefer the physically reachable side of the
+    // ball. This prevents the CPU from retreating just because the ball is
+    // close to the goal line. It still has to get behind the ball to shoot.
+    const nearLeftGoal = ball.x < field.left + 95 && mouth;
+    const goalSideX = clamp(ball.x + contactDistance, minX, maxX);
+    const goalSideY = clamp(ball.y, minY, maxY);
+
+    // If the ideal contact point is impossible (usually because the ball is
+    // jammed against a corner), DO NOT drive into the wall. Back away and let
+    // the ball move to a position where a real shot is possible.
+    let targetX;
+    let targetY;
+
+    if (nearLeftGoal) {
+      targetX = goalSideX;
+      targetY = goalSideY;
+    } else if (idealReachable) {
+      targetX = idealX;
+      targetY = idealY;
+    } else {
+      targetX = clamp(ball.x - gx * 85, minX, maxX);
+      targetY = clamp(ball.y - gy * 85, minY, maxY);
+
+      // If that fallback still puts us right against a wall, retreat toward
+      // the center instead of faceplanting into the corner.
+      const nearRightWall = ball.x > field.right - ball.r - 8;
+      const nearLeftWall = ball.x < field.left + ball.r + 8;
+      const nearBottom = ball.y > field.bottom - ball.r - 8;
+      const nearTop = ball.y < field.top + ball.r + 8;
+
+      if ((nearRightWall || nearLeftWall || nearBottom || nearTop) && !mouth && !nearLeftGoal) {
+        targetX = field.right - 95;
+        targetY = H / 2;
+
+        // Stay on our side of the pitch while the ball is trapped.
+        if (ball.x < W / 2) targetX = field.left + 95;
+      }
+    }
+
+    const dxBall = ball.x - cpu.x;
+    const dyBall = ball.y - cpu.y;
+    const distBall = Math.hypot(dxBall, dyBall) || 1;
+    const contactX = dxBall / distBall;
+    const contactY = dyBall / distBall;
+    const alignment = contactX * gx + contactY * gy;
+
+    // Only shoot when we are actually touching the ball from a useful angle.
+    // This keeps the AI from rubbing against the ball while waiting.
+    const touchingNow = distBall <= contactDistance + 4;
+    const properlyPositioned =
+      (idealReachable || nearLeftGoal) && touchingNow && alignment > 0.72;
+
+    if (properlyPositioned && cpu.shotCooldown <= 0) {
+      cpu.charging = true;
+      cpu.charge = clamp(cpu.charge + CPU_CHARGE_RATE * dt, 0, 1);
+
+      if (cpu.charge >= 0.55) {
+        // The shot direction is ONLY the actual CPU -> ball direction.
+        const power = CPU_MIN_SHOT + (CPU_MAX_SHOT - CPU_MIN_SHOT) * cpu.charge;
+        ball.vx = contactX * power;
+        ball.vy = contactY * power;
+        ball.x = cpu.x + contactX * (cpu.r + ball.r + 2);
+        ball.y = cpu.y + contactY * (cpu.r + ball.r + 2);
+
+        cpu.charge = 0;
+        cpu.charging = false;
+        cpu.shotCooldown = CPU_SHOT_COOLDOWN;
+      }
+      return;
+    }
+
+    cpu.charging = false;
+    cpu.charge = 0;
+
+    // If the ball is already inside the opponent's goal, leave it alone.
+    if (ball.x < field.left && mouth) {
+      targetX = field.left + cpu.r + 10;
+      targetY = clamp(ball.y, minY, maxY);
+    }
+
+    let mx = targetX - cpu.x;
+    let my = targetY - cpu.y;
+    const mlen = Math.hypot(mx, my);
+
+    if (mlen > 0.5) {
+      mx /= mlen;
+      my /= mlen;
+      const step = Math.min(cpu.speed * dt * 60, mlen);
+      cpu.x += mx * step;
+      cpu.y += my * step;
+    }
+
+    clampPlayerToField(cpu);
+
+    if (aiCount === 2) {
+      // In 2-AI mode this CPU is the striker: it stays forward and does not
+      // retreat deep into its own half to chase the ball.
+      const strikerMaxX = W / 2 + 24;
+      cpu.x = Math.min(cpu.x, strikerMaxX);
+      cpu.x = Math.max(cpu.x, field.left + cpu.r);
+    }
+  }
+
+  function moveDefender(dt) {
+    // The defender is only allowed to play in its own half.
+    const halfLine = W / 2;
+    const minX = halfLine + defender.r;
+    const maxX = field.right - defender.r;
+    const minY = field.top + defender.r;
+    const maxY = field.bottom - defender.r;
+
+    // Stay useful around the ball, but never cross the halfway line.
+    let targetX;
+    let targetY;
+
+    if (ball.x >= halfLine) {
+      // Normally approach from the right so contact pushes the ball toward
+      // the player's half. If the ball is against the right wall, the
+      // defender cannot get directly behind it, so move slightly above/below
+      // it and make a diagonal contact to pull it out of the corner.
+      const nearRightWall = ball.x > field.right - ball.r - 10;
+      const nearTop = ball.y < field.top + ball.r + 18;
+      const nearBottom = ball.y > field.bottom - ball.r - 18;
+
+      if (nearRightWall && (nearTop || nearBottom)) {
+        // A player cannot physically stand outside the wall, so do not chase
+        // the exact corner. Approach from the inside at a diagonal instead.
+        targetX = clamp(ball.x - 55, minX, maxX);
+        const escapeOffset = 55;
+        targetY = nearTop
+          ? clamp(ball.y + escapeOffset, minY, maxY)
+          : clamp(ball.y - escapeOffset, minY, maxY);
+      } else if (nearRightWall) {
+        // Give the defender a diagonal approach rather than rubbing straight
+        // into the wall beside the ball.
+        targetX = clamp(ball.x - 50, minX, maxX);
+        const offset = ball.y < H / 2 ? 55 : -55;
+        targetY = clamp(ball.y + offset, minY, maxY);
+      } else {
+        targetX = Math.max(ball.x + defender.r + ball.r + 2, halfLine + 28);
+        targetX = clamp(targetX, minX, maxX);
+        targetY = clamp(ball.y, minY, maxY);
+      }
+    } else {
+      // The ball has entered the player's half. Hang back instead of camping
+      // on the halfway line. Only move farther forward if the ball comes
+      // deeper into the defender's half.
+      const defensiveLine = halfLine + 105;
+      const ballPressureX = ball.x + 85;
+      targetX = Math.max(defensiveLine, ballPressureX);
+      targetX = clamp(targetX, minX, maxX);
+      targetY = clamp(ball.y, minY, maxY);
+    }
+
+    let dx = targetX - defender.x;
+    let dy = targetY - defender.y;
+    const len = Math.hypot(dx, dy);
+    if (len > 0.5) {
+      dx /= len;
+      dy /= len;
+      const step = Math.min(defender.speed * dt * 60, len);
+      defender.x += dx * step;
+      defender.y += dy * step;
+    }
+
+    defender.x = clamp(defender.x, minX, maxX);
+    defender.y = clamp(defender.y, minY, maxY);
+  }
+
+  function pushBallFromCircle(circle, strength) {
+    if (!touching(circle, ball)) return;
+
+    let dx = ball.x - circle.x;
+    let dy = ball.y - circle.y;
+    let len = Math.hypot(dx, dy);
+
+    if (len < 0.001) {
+      dx = circle === player ? 1 : -1;
+      dy = 0;
+      len = 1;
+    }
+
+    dx /= len;
+    dy /= len;
+
+    const overlap = circle.r + ball.r - len;
+    if (overlap > 0) {
+      ball.x += dx * (overlap + 0.2);
+      ball.y += dy * (overlap + 0.2);
+    }
+
+    ball.vx += dx * strength;
+    ball.vy += dy * strength;
+
+    const speed = Math.hypot(ball.vx, ball.vy);
+    if (speed > BALL_MAX_SPEED) {
+      ball.vx = ball.vx / speed * BALL_MAX_SPEED;
+      ball.vy = ball.vy / speed * BALL_MAX_SPEED;
+    }
+  }
+
+  function physics(dt) {
+    // Players are solid obstacles. Resolve overlaps before and after movement
+    // so the ball cannot phase through either player.
+    resolveBallPlayerCollision(player);
+    resolveBallPlayerCollision(cpu);
+    if (aiCount === 2) resolveBallPlayerCollision(defender);
+
+    if (touching(player, ball) && !(gameMode === "multiplayer" ? player.__mpCharging : charging)) {
+      pushBallFromCircle(player, 0.08);
+    }
+
+    if (touching(cpu, ball) && !(gameMode === "multiplayer" ? cpu.__mpCharging : cpu.charging)) {
+      pushBallFromCircle(cpu, 0.08);
+    }
+
+    if (aiCount === 2 && touching(defender, ball)) {
+      // The defender's job is to push the ball toward the player's half.
+      pushBallFromCircle(defender, 0.10);
+
+      // Corner rescue: if the ball gets pinned against the right wall near
+      // the top/bottom, give it a small diagonal clearance toward midfield.
+      // This prevents the defender from repeatedly rubbing the ball into the
+      // corner where neither object can physically get around the wall.
+      const cornerTop = ball.x > field.right - ball.r - 8 && ball.y < field.top + ball.r + 20;
+      const cornerBottom = ball.x > field.right - ball.r - 8 && ball.y > field.bottom - ball.r - 20;
+      if (cornerTop || cornerBottom) {
+        ball.vx = Math.min(ball.vx, -2.2);
+        ball.vy += cornerTop ? 1.35 : -1.35;
+      }
+    }
+
+    ball.x += ball.vx * dt * 60;
+    ball.y += ball.vy * dt * 60;
+
+    const friction = Math.pow(BALL_FRICTION, dt * 60);
+    ball.vx *= friction;
+    ball.vy *= friction;
+
+    const inMouth = inGoalMouth(ball.y);
+    const bounce = 0.82;
+
+    // Top/bottom walls always bounce.
+    if (ball.y - ball.r < field.top) {
+      ball.y = field.top + ball.r;
+      ball.vy = Math.abs(ball.vy) * bounce;
+    }
+    if (ball.y + ball.r > field.bottom) {
+      ball.y = field.bottom - ball.r;
+      ball.vy = -Math.abs(ball.vy) * bounce;
+    }
+
+    // The goal opening is the ONLY place where the ball may cross the
+    // field's vertical boundary. Everywhere else the line is a solid wall.
+    if (ball.x - ball.r < field.left && !inMouth) {
+      ball.x = field.left + ball.r;
+      ball.vx = Math.abs(ball.vx) * bounce;
+      if (Math.abs(ball.vy) < 1.0) ball.vy = ball.vy >= 0 ? 1.0 : -1.0;
+    }
+    if (ball.x + ball.r > field.right && !inMouth) {
+      ball.x = field.right - ball.r;
+      ball.vx = -Math.abs(ball.vx) * bounce;
+      if (Math.abs(ball.vy) < 1.0) ball.vy = ball.vy >= 0 ? 1.0 : -1.0;
+    }
+
+    // Inside the actual goal mouth, the ball is allowed to cross the
+    // vertical goal line. Reaching the back of the net scores immediately.
+    if (inMouth && ball.x - ball.r < field.left - field.goalDepth) {
+      scoreGoal("left");
+      return;
+    }
+    if (inMouth && ball.x + ball.r > field.right + field.goalDepth) {
+      scoreGoal("right");
+      return;
+    }
+
+    // If the ball is inside a goal mouth, it may travel toward the goal,
+    // but it can never pass beyond the physical back of the net without
+    // scoring. Keep it inside the legal goal depth until scoreGoal runs.
+    if (inGoalMouth(ball.y)) {
+      if (ball.x < field.left - field.goalDepth) {
+        ball.x = field.left - field.goalDepth;
+        if (ball.vx < 0) ball.vx = Math.abs(ball.vx) * 0.5;
+        scoreGoal("left");
+        return;
+      }
+      if (ball.x > field.right + field.goalDepth) {
+        ball.x = field.right + field.goalDepth;
+        if (ball.vx > 0) ball.vx = -Math.abs(ball.vx) * 0.5;
+        scoreGoal("right");
+        return;
+      }
+    }
+
+    // Final separation after all wall/goal movement.
+    resolveBallPlayerCollision(player);
+    resolveBallPlayerCollision(cpu);
+    if (aiCount === 2) resolveBallPlayerCollision(defender);
+
+    // Absolute safety net: the ball can never leave the playable canvas.
+    ball.x = clamp(ball.x, -ball.r, W + ball.r);
+    ball.y = clamp(ball.y, -ball.r, H + ball.r);
+  }
+
+  function drawField() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Grass.
+    ctx.fillStyle = "#15803d";
+    ctx.fillRect(0, 0, W, H);
+
+    // Subtle stripes.
+    for (let i = 0; i < 8; i++) {
+      ctx.fillStyle = i % 2 === 0 ? "rgba(255,255,255,.025)" : "rgba(0,0,0,.025)";
+      ctx.fillRect(
+        field.left + (field.right - field.left) * i / 8,
+        field.top,
+        (field.right - field.left) / 8,
+        field.bottom - field.top
+      );
+    }
+
+    // Boundary.
+    ctx.strokeStyle = "rgba(255,255,255,.9)";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(field.left, field.top, field.right - field.left, field.bottom - field.top);
+
+    // Halfway line.
+    ctx.beginPath();
+    ctx.moveTo(W / 2, field.top);
+    ctx.lineTo(W / 2, field.bottom);
+    ctx.stroke();
+
+    // Centre circle.
+    ctx.beginPath();
+    ctx.arc(W / 2, H / 2, 65, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(W / 2, H / 2, 4, 0, Math.PI * 2);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+
+    // Goal boxes.
+    ctx.strokeRect(field.left, H / 2 - field.goalHalf - 45, 75, field.goalHalf * 2 + 90);
+    ctx.strokeRect(field.right - 75, H / 2 - field.goalHalf - 45, 75, field.goalHalf * 2 + 90);
+
+    // Goals.
+    ctx.fillStyle = "rgba(255,255,255,.28)";
+    ctx.fillRect(field.left - field.goalDepth, H / 2 - field.goalHalf, field.goalDepth, field.goalHalf * 2);
+    ctx.fillRect(field.right, H / 2 - field.goalHalf, field.goalDepth, field.goalHalf * 2);
+
+    ctx.strokeStyle = "#fff";
+    ctx.strokeRect(field.left - field.goalDepth, H / 2 - field.goalHalf, field.goalDepth, field.goalHalf * 2);
+    ctx.strokeRect(field.right, H / 2 - field.goalHalf, field.goalDepth, field.goalHalf * 2);
+  }
+
+  function drawCircle(entity, label) {
+    ctx.beginPath();
+    ctx.arc(entity.x + 3, entity.y + 4, entity.r, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0,0,0,.22)";
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(entity.x, entity.y, entity.r, 0, Math.PI * 2);
+    ctx.fillStyle = entity.color;
+    ctx.fill();
+
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 12px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, entity.x, entity.y);
+  }
+
+  function drawBall() {
+    ctx.beginPath();
+    ctx.arc(ball.x + 2, ball.y + 3, ball.r, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0,0,0,.25)";
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+    ctx.strokeStyle = "#111827";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Simple football-like pentagon.
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const a = -Math.PI / 2 + i * Math.PI * 2 / 5;
+      const x = ball.x + Math.cos(a) * 4.5;
+      const y = ball.y + Math.sin(a) * 4.5;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = "#111827";
+    ctx.fill();
+  }
+
+  function drawChargeDirection() {
+    const entity = gameMode === "multiplayer" && localSide === "right" ? cpu : player;
+    const isCharging = gameMode === "multiplayer" && localSide === "right" ? charging : charging;
+    const kickRange = entity.r + ball.r + 8;
+    if (!isCharging || distance(entity.x, entity.y, ball.x, ball.y) > kickRange) return;
+
+    let dx = ball.x - entity.x;
+    let dy = ball.y - entity.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 0.001) return;
+
+    dx /= len;
+    dy /= len;
+
+    const lineLen = 35 + charge * 80;
+
+    ctx.save();
+    ctx.strokeStyle = "rgba(250,204,21,.95)";
+    ctx.lineWidth = 5;
+    ctx.setLineDash([7, 7]);
+    ctx.beginPath();
+    ctx.moveTo(ball.x, ball.y);
+    ctx.lineTo(ball.x + dx * lineLen, ball.y + dy * lineLen);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function draw() {
+    drawField();
+    drawCircle(player, gameMode === "multiplayer" ? (localSide === "left" ? "YOU" : "OPP") : "YOU");
+    drawCircle(cpu, gameMode === "multiplayer" ? (localSide === "right" ? "YOU" : "OPP") : (aiCount === 2 ? "ST" : "CPU"));
+    if (aiCount === 2) drawCircle(defender, "DEF");
+    drawBall();
+    drawChargeDirection();
+  }
+
+  function update(dt) {
+    if (!gameStarted) {
+      draw();
+      return;
+    }
+
+    if (countdownTimer > 0) {
+      countdownTimer -= dt;
+      if (countdownTimer > 2) countdownEl.textContent = "3";
+      else if (countdownTimer > 1) countdownEl.textContent = "2";
+      else if (countdownTimer > 0) countdownEl.textContent = "1";
+      else {
+        countdownTimer = 0;
+        goTimer = 0.6;
+        countdownEl.textContent = "GO!";
+      }
+
+      draw();
+      return;
+    }
+
+    if (goTimer > 0) {
+      goTimer -= dt;
+      if (goTimer <= 0) countdownEl.textContent = "";
+      draw();
+      // Do not freeze gameplay during GO; only the visual countdown is ending.
+    }
+
+    if (matchOver) {
+      draw();
+      return;
+    }
+
+    if (gameMode === "multiplayer" && matchEndAt > 0) {
+      matchTime = Math.max(0, (matchEndAt - (Date.now() + networkClockOffset)) / 1000);
+    } else {
+      matchTime = Math.max(0, matchTime - dt);
+    }
+    updateTimerDisplay();
+    if (matchTime <= 0) {
+      endMatch();
+      draw();
+      return;
+    }
+
+    if (messageTimer > 0) {
+      messageTimer -= dt;
+      if (messageTimer <= 0) goalMessage.classList.remove("show");
+    }
+
+    if (resetTimer > 0) {
+      // The host owns goal-reset timing in multiplayer. Guests wait for the
+      // host's snapshots instead of independently resetting their own state.
+      if (gameMode === "multiplayer" && multiplayerRole === "guest") {
+        draw();
+        return;
+      }
+      resetTimer = Math.max(0, resetTimer - dt);
+      if (resetTimer <= 0) resetPositions();
+      if (gameMode === "multiplayer" && multiplayerRole === "host") {
+        networkSendTimer += dt;
+        if (networkSendTimer >= NETWORK_RATE) {
+          networkSendTimer = 0;
+          sendHostSnapshot();
+        }
+      }
+      draw();
+      return;
+    }
+
+    movePlayer(dt);
+
+    if (gameMode === "multiplayer") {
+      if (multiplayerRole === "guest") {
+        // The guest submits input only. The host owns player positions,
+        // ball physics, collision, scoring, shots, and the match clock.
+        const localEntity = localSide === "left" ? player : cpu;
+        if (charging && distance(localEntity.x, localEntity.y, ball.x, ball.y) <= localEntity.r + ball.r + 8) {
+          localEntity.charge = clamp(localEntity.charge + CHARGE_RATE * dt, 0, MAX_CHARGE);
+        }
+        chargeEl.style.width = `${localEntity.charge * 100}%`;
+        networkInputTimer += dt;
+        if (networkInputTimer >= NETWORK_RATE) {
+          networkInputTimer = 0;
+          sendLocalInput();
+        }
+        // The guest renders host snapshots only. It never mutates the ball.
+        draw();
+        return;
+      }
+
+      // Host controls physics AND the official match clock for the entire match.
+      // Guests only display the host's clock snapshot, so two browser tabs
+      // cannot independently decide when full time happens.
+      const localEntity = localSide === "left" ? player : cpu;
+      const localCharging = charging;
+      if (localCharging) {
+        const kickRange = localEntity.r + ball.r + 8;
+        if (distance(localEntity.x, localEntity.y, ball.x, ball.y) <= kickRange) {
+          localEntity.charge = clamp(localEntity.charge + CHARGE_RATE * dt, 0, MAX_CHARGE);
+        }
+      }
+      player.__mpCharging = localSide === "left" ? charging : remoteCharging;
+      cpu.__mpCharging = localSide === "right" ? charging : remoteCharging;
+      player.__mpActiveCharging = player.__mpCharging;
+      cpu.__mpActiveCharging = cpu.__mpCharging;
+      player._dummy = player.__mpCharging;
+      cpu._dummy = cpu.__mpCharging;
+      chargeEl.style.width = `${Math.max(player.charge, cpu.charge) * 100}%`;
+      physics(dt);
+      networkSendTimer += dt;
+      if (networkSendTimer >= NETWORK_RATE) {
+        networkSendTimer = 0;
+        sendHostSnapshot();
+      }
+      draw();
+      return;
+    }
+
+    moveCPU(dt);
+    if (aiCount === 2) moveDefender(dt);
+
+    const playerKickRange = player.r + ball.r + 8;
+    const playerNearBall = distance(player.x, player.y, ball.x, ball.y) <= playerKickRange;
+    if (charging && playerNearBall) {
+      charge = clamp(charge + CHARGE_RATE * dt, 0, MAX_CHARGE);
+      chargeEl.style.width = `${charge * 100}%`;
+    } else if (charging && !playerNearBall) {
+      charge = 0;
+      chargeEl.style.width = "0%";
+    }
+
+    physics(dt);
+    draw();
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    const now = performance.now();
+    const elapsed = Math.max(0, (now - lastUpdateWall) / 1000);
+    lastUpdateWall = now;
+    debugVisibilityChanges++;
+    debugLastVisibility = `${document.visibilityState} after ${elapsed.toFixed(1)}s away`;
+
+    // Do NOT fast-forward up to 15 seconds of physics when a throttled tab is
+    // foregrounded again. That bypassed update()'s reset/countdown handling.
+    // Resume from current authoritative state and publish one fresh snapshot.
+    networkSendTimer = 0;
+    networkInputTimer = 0;
+    if (document.visibilityState === "visible" && gameStarted && !matchOver &&
+        gameMode === "multiplayer" && multiplayerRole === "host" && connection && networkReady) {
+      sendHostSnapshot();
+    }
+    updateNetworkDebug();
+  });
+
+  window.addEventListener("beforeunload", () => {
+    if (connection && multiplayerRole === "host" && networkReady) {
+      try { connection.send({type:"host_closing", matchEndAt, matchTime}); } catch {}
+    }
+  });
+
+  function loop(now) {
+    const wallDt = Math.max(0, (now - lastUpdateWall) / 1000);
+    lastUpdateWall = now;
+    const dt = Math.min(wallDt, 0.033);
+    lastTime = now;
+    update(dt);
+    updateNetworkDebug();
+    requestAnimationFrame(loop);
+  }
+
+  window.addEventListener("keydown", (e) => {
+    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
+    const key = e.key.toLowerCase();
+    if (["w","a","s","d","arrowup","arrowdown","arrowleft","arrowright"," "].includes(key)) {
+      e.preventDefault();
+    }
+    keys[key] = true;
+    debugLastMessage = `keydown ${key}`;
+
+    if (e.code === "Space" && !charging) {
+      charging = true;
+    }
+    if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
+  });
+
+  window.addEventListener("keyup", (e) => {
+    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
+    const key = e.key.toLowerCase();
+    keys[key] = false;
+    debugLastMessage = `keyup ${key}`;
+
+    if (e.code === "Space") {
+      if (charging) shoot();
+      charging = false;
+    }
+    if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
+  });
+
+  canvas.addEventListener("mousedown", () => canvas.focus());
+  window.addEventListener("blur", () => {
+    for (const key of Object.keys(keys)) keys[key] = false;
+    charging = false;
+    if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
+  });
+
+  cpuBtn.addEventListener("click", () => {
+    mainModeChoices.style.display = "none";
+    cpuChoices.style.display = "block";
+  });
+
+  multiplayerBtn.addEventListener("click", () => {
+    showMultiplayerHome();
+  });
+
+  createRoomBtn.addEventListener("click", createRoom);
+  joinRoomBtn.addEventListener("click", showMpJoin);
+  mpBackBtn.addEventListener("click", () => {
+    closeNetwork();
+    multiplayerOverlay.style.display = "none";
+    menuOverlay.style.display = "grid";
+    gameMode = "cpu";
+  });
+  cancelRoomBtn.addEventListener("click", () => {
+    closeNetwork();
+    showMultiplayerHome();
+  });
+  cancelJoinBtn.addEventListener("click", () => {
+    closeNetwork();
+    showMultiplayerHome();
+  });
+  connectRoomBtn.addEventListener("click", joinRoom);
+  roomCodeInput.addEventListener("keydown", e => {
+    if (e.key === "Enter") joinRoom();
+  });
+  copyRoomBtn.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(roomCode);
+      mpStatus.textContent = "Code copied! Waiting for opponent...";
+    } catch (_) {
+      mpStatus.textContent = "Select the code and copy it manually.";
+    }
+  });
+
+  backModeBtn.addEventListener("click", () => {
+    mainModeChoices.style.display = "block";
+    cpuChoices.style.display = "none";
+  });
+
+  aiChoices.forEach(button => {
+    button.addEventListener("click", () => {
+      startMatch(Number(button.dataset.ai));
+    });
+  });
+
+  playAgainBtn.addEventListener("click", () => {
+    if (gameMode === "multiplayer") {
+      // Online matches only restart after BOTH players choose Play Again.
+      rematchReady = true;
+      fulltimeControls.style.display = "none";
+      if (multiplayerRole === "host") {
+        if (opponentRematchReady) {
+          startNetworkRematch();
+        } else {
+          goalMessage.textContent = "WAITING FOR OPPONENT...";
+          goalMessage.classList.add("show");
+        }
+      } else if (connection && networkReady) {
+        connection.send({type:"rematch_ready"});
+        goalMessage.textContent = "WAITING FOR OPPONENT...";
+        goalMessage.classList.add("show");
+      }
+      return;
+    }
+    // Keep the selected 1-AI/2-AI mode and start a completely fresh match.
+    resetMatch();
+    if (fulltimeFadeTimer) {
+      clearTimeout(fulltimeFadeTimer);
+      fulltimeFadeTimer = null;
+    }
+    countdownEl.classList.remove("fade-out");
+    countdownEl.style.opacity = "1";
+    fulltimeControls.style.display = "none";
+    goalMessage.classList.remove("show", "fade-out");
+    menuOverlay.style.display = "none";
+    gameStarted = true;
+    countdownTimer = 3.0;
+    goTimer = 0;
+    matchTime = MATCH_LENGTH;
+    matchOver = false;
+    updateTimerDisplay();
+    countdownEl.textContent = "3";
+  });
+
+  backMenuBtn.addEventListener("click", () => {
+    resetMatch();
+    showMenu();
+  });
+
+  resetBtn.addEventListener("click", resetMatch);
+
+  resetPositions();
+  updateTimerDisplay();
+  showMenu();
+  draw();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
