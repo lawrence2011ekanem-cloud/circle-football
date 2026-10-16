@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Circle Football - Prototype</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Circle Football — Network Debug v6</title>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -239,10 +239,88 @@
 
 #netDebugPanel{position:fixed;left:8px;bottom:8px;z-index:99999;background:rgba(5,12,24,.94);color:#d9f3ff;border:1px solid #48a9d6;border-radius:8px;padding:8px 10px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;max-width:min(520px,calc(100vw - 16px));white-space:pre-wrap;pointer-events:none;max-height:45vh;overflow:hidden;box-shadow:0 3px 14px #0008}
 
+
+  /* Mobile/web publishing support */
+  canvas { touch-action: none; }
+  #netDebugPanel { display: none; }
+  #debugToggle {
+    position: fixed; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right));
+    z-index: 100000; padding: 7px 10px; font-size: 12px; opacity: .82;
+  }
+  #netDebugPanel.debug-visible { display: block; }
+  #touchControls {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    margin: 12px auto 0;
+    padding: 10px 8px;
+    border: 1px solid #334155;
+    border-radius: 14px;
+    background: rgba(15,23,42,.94);
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+  .touch-pad {
+    display: grid;
+    grid-template-columns: repeat(3, clamp(42px, 13vw, 58px));
+    grid-template-rows: repeat(3, clamp(42px, 13vw, 58px));
+    gap: 4px;
+    flex: 0 0 auto;
+  }
+  .touch-key {
+    display: flex; align-items: center; justify-content: center;
+    padding: 0; margin: 0; border-radius: 12px;
+    border: 1px solid #64748b; background: #334155;
+    font-size: 22px; font-weight: 900; touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .touch-key.pressed, .shoot-button.pressed { background: #2563eb; transform: scale(.97); }
+  .touch-spacer { pointer-events: none; }
+  .touch-actions { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; flex:1; min-width:0; }
+  .shoot-button {
+    width: min(100%, 170px); min-height: 86px; padding: 10px;
+    background: #b45309; border: 2px solid #fbbf24; border-radius: 18px;
+    font-size: clamp(13px, 4vw, 17px); font-weight: 900; line-height: 1.2;
+    touch-action: none; -webkit-tap-highlight-color: transparent;
+  }
+  .touch-note { max-width: 190px; text-align:center; font-size:11px; line-height:1.3; color:#cbd5e1; }
+  @media (max-width: 760px), (pointer: coarse) {
+    body { display:block; min-height:100vh; min-height:100dvh; overflow:auto; padding: max(8px, env(safe-area-inset-top)) 8px max(12px, env(safe-area-inset-bottom)); }
+    .wrap { width:100%; max-width:1000px; margin:0 auto; }
+    .top { align-items:flex-start; gap:8px; margin: 28px 0 8px; }
+    h1 { font-size: clamp(16px, 4.4vw, 22px); }
+    .hint { font-size: 11px; line-height:1.35; max-width: 48vw; }
+    .score-area { gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+    #timer { font-size:18px; min-width:40px; }
+    #score { font-size: clamp(12px, 3.4vw, 16px); }
+    .game-shell { border-radius:8px; }
+    .bottom { align-items:center; flex-wrap:wrap; font-size:11px; }
+    .bottom span { max-width:65%; }
+    #touchControls { display:flex; }
+    .menu-card { width:min(94vw, 480px); padding:30px 16px; }
+    .modeChoice { min-width: min(180px, 39vw); padding:12px 14px; font-size:17px; }
+    .mp-card { max-height:85dvh; overflow-y:auto; padding:20px 16px; }
+    .mp-card h3 { font-size:26px; }
+    #netDebugPanel { max-width:calc(100vw - 16px); max-height:48dvh; overflow:auto; font-size:10px; line-height:1.35; }
+  }
+  @media (orientation: landscape) and (max-height: 520px) and (pointer: coarse) {
+    body { padding: 4px 8px; }
+    .top { margin-top: 26px; margin-bottom: 4px; }
+    .hint { display:none; }
+    .game-shell { max-height: min(58vh, 360px); }
+    #touchControls { margin-top:6px; padding:5px 8px; }
+    .touch-pad { grid-template-columns:repeat(3, 40px); grid-template-rows:repeat(3, 34px); }
+    .shoot-button { min-height:62px; }
+  }
+
 </style>
 </head>
 <body>
-<div id="netDebugPanel">MP DEBUG: waiting for game…</div>
+<div id="netDebugPanel">MP DEBUG v6: waiting for game…</div>
+<button id="debugToggle" type="button" aria-expanded="false">Show debug</button>
 <div id="menuOverlay" class="menu-overlay">
   <div class="menu-card">
     <h2>⚽ Circle Football</h2>
@@ -300,8 +378,8 @@
 <div class="wrap">
   <div class="top">
     <div>
-      <h1>⚽ Circle Football — Prototype</h1>
-      <div class="hint">WASD to move • Hold Space to charge • Release to shoot</div>
+      <h1>⚽ Circle Football</h1>
+      <div class="hint">WASD / arrows to move • Hold Space to charge • Release to shoot</div>
     </div>
     <div class="score-area"><div id="timer">1:30</div><div id="score">YOU 0 — 0 CPU</div></div>
   </div>
@@ -329,6 +407,18 @@
     </div>
   </div>
 
+  <div id="touchControls" aria-label="Touch controls">
+    <div class="touch-pad" aria-label="Movement">
+      <div class="touch-spacer"></div><button class="touch-key" type="button" data-key="arrowup" aria-label="Move up">▲</button><div class="touch-spacer"></div>
+      <button class="touch-key" type="button" data-key="arrowleft" aria-label="Move left">◀</button><div class="touch-spacer"></div><button class="touch-key" type="button" data-key="arrowright" aria-label="Move right">▶</button>
+      <div class="touch-spacer"></div><button class="touch-key" type="button" data-key="arrowdown" aria-label="Move down">▼</button><div class="touch-spacer"></div>
+    </div>
+    <div class="touch-actions">
+      <button id="touchShoot" class="shoot-button" type="button" aria-label="Hold to charge, release to shoot">HOLD TO<br>CHARGE</button>
+      <div class="touch-note">Hold, then release to shoot</div>
+    </div>
+  </div>
+
   <div class="bottom">
     <span>Get around the ball and use your position to control the shot direction.</span>
     <button id="reset">Reset Match</button>
@@ -341,6 +431,9 @@
   "use strict";
 
   const canvas = document.getElementById("game");
+  const debugToggle = document.getElementById("debugToggle");
+  const netDebugPanel = document.getElementById("netDebugPanel");
+  const touchShoot = document.getElementById("touchShoot");
   const ctx = canvas.getContext("2d");
   const scoreEl = document.getElementById("score");
   const timerEl = document.getElementById("timer");
@@ -460,6 +553,26 @@
   let debugSnapshotSeq = 0;
   let lastUpdateWall = performance.now();
   let hostAuthorityLost = false;
+  let debugConnectionStage = "idle";
+  let debugPeerError = "none";
+  let peerSetupTimer = null;
+  let connectionSetupTimer = null;
+
+  function clearPeerSetupTimer() {
+    if (peerSetupTimer !== null) { clearTimeout(peerSetupTimer); peerSetupTimer = null; }
+  }
+  function clearConnectionSetupTimer() {
+    if (connectionSetupTimer !== null) { clearTimeout(connectionSetupTimer); connectionSetupTimer = null; }
+  }
+  function networkStatus(message) {
+    debugConnectionStage = message;
+    debugLastMessage = message;
+    updateNetworkDebug();
+  }
+  function peerErrorText(err) {
+    if (!err) return "unknown PeerJS error";
+    return `${err.type || "error"}${err.message ? ": " + err.message : ""}`;
+  }
 
   // --- Online multiplayer state ---
   let gameMode = "cpu"; // "cpu" or "multiplayer"
@@ -500,8 +613,12 @@
         ? "SNAPSHOT: host -> this guest (received must rise while host tab is running)"
         : "SNAPSHOT direction: waiting for role";
     el.textContent =
-      `MP DEBUG v5 | mode=${gameMode} tab=${document.visibilityState}\n` +
+      `MP DEBUG v6 | mode=${gameMode} tab=${document.visibilityState}\n` +
       `role=${multiplayerRole || "none"} local=${localSide || "?"} remote=${remoteSide || "?"} ready=${networkReady} conn=${connectionState}\n` +
+      `stage=${debugConnectionStage}\n` +
+      `peer id=${peer?.id || "pending/none"} signaling=${peer ? (peer.disconnected ? "disconnected" : "connected/not-disconnected") : "no peer"}\n` +
+      `data peer=${connection?.peer || "none"} ICE=${connection?.peerConnection?.iceConnectionState || "n/a"} PC=${connection?.peerConnection?.connectionState || "n/a"}\n` +
+      `peer error=${debugPeerError}\n` +
       `gameStarted=${gameStarted} countdown=${countdownTimer.toFixed(2)} reset=${resetTimer.toFixed(2)}\n` +
       `${expectedDirection}\n` +
       `INPUT sent=${debugInputsSent} host-accepted=${multiplayerRole === "host" ? debugInputsReceived : "see host tab"} rejected=${debugInputsRejected}\n` +
@@ -552,6 +669,10 @@
   }
 
   function closeNetwork() {
+    clearPeerSetupTimer();
+    clearConnectionSetupTimer();
+    debugConnectionStage = "idle";
+    debugPeerError = "none";
     networkReady = false;
     multiplayerRole = null;
     localSide = null;
@@ -654,11 +775,27 @@
   function setupConnection(conn, role) {
     connection = conn;
     multiplayerRole = role;
-    debugLastMessage = `${role} connection set up`;
+    networkReady = false;
+    clearConnectionSetupTimer();
+    networkStatus(`${role}: peer found; negotiating direct data connection`);
+    if (role === "guest") mpJoinStatus.textContent = "Room found; establishing direct connection...";
+    else mpStatus.textContent = "Opponent found; establishing direct connection...";
+
+    connectionSetupTimer = setTimeout(() => {
+      if (connection === conn && !conn.open) {
+        const ice = conn.peerConnection?.iceConnectionState || "not available";
+        const pc = conn.peerConnection?.connectionState || "not available";
+        const message = `Direct connection timed out (ICE=${ice}, PC=${pc}). Try refreshing both devices and joining again; restrictive networks may block direct peer connections.`;
+        networkStatus(`${role}: timeout waiting for data connection`);
+        if (role === "guest") mpJoinStatus.textContent = message;
+        else mpStatus.textContent = message;
+      }
+    }, 15000);
 
     connection.on("open", () => {
+      clearConnectionSetupTimer();
       networkReady = true;
-      debugLastMessage = `${role} connection open`;
+      networkStatus(`${role}: direct data connection open`);
       if (role === "guest") {
         mpJoinStatus.textContent = "Connected. Waiting for host...";
         connection.send({ type:"hello" });
@@ -862,7 +999,8 @@
     });
 
     connection.on("close", () => {
-      debugLastMessage = `${role} connection closed`;
+      clearConnectionSetupTimer();
+      networkStatus(`${role}: data connection closed`);
       if (gameStarted && !matchOver) {
         networkReady = false;
         matchOver = true;
@@ -874,40 +1012,80 @@
     });
 
     connection.on("error", (err) => {
-      const message = err && err.message ? err.message : "Connection error.";
-      debugLastMessage = `${role} connection error: ${message}`;
-      mpStatus.textContent = message;
-      mpJoinStatus.textContent = message;
+      clearConnectionSetupTimer();
+      const message = peerErrorText(err);
+      debugPeerError = message;
+      networkStatus(`${role}: data connection error`);
+      mpStatus.textContent = `Connection error: ${message}`;
+      mpJoinStatus.textContent = `Connection error: ${message}`;
     });
   }
 
   function createRoom() {
     closeNetwork();
     showMpCreate();
-    mpStatus.textContent = "Connecting...";
+    mpStatus.textContent = "Connecting to multiplayer signaling service...";
+    networkStatus("host: creating PeerJS room");
+    if (typeof Peer === "undefined") {
+      debugPeerError = "PeerJS library did not load";
+      networkStatus("host: PeerJS library unavailable");
+      mpStatus.textContent = "Multiplayer library failed to load. Refresh the webpage and try again.";
+      return;
+    }
     roomCode = randomRoomCode();
-    peer = new Peer(roomCode);
+    try {
+      peer = new Peer(roomCode, { debug: 1 });
+    } catch (err) {
+      debugPeerError = peerErrorText(err);
+      networkStatus("host: failed to create PeerJS instance");
+      mpStatus.textContent = `Room error: ${debugPeerError}`;
+      return;
+    }
+    const thisPeer = peer;
+    peerSetupTimer = setTimeout(() => {
+      if (peer === thisPeer && !thisPeer.id) {
+        networkStatus("host: timed out waiting for PeerJS signaling server");
+        mpStatus.textContent = "Timed out connecting to the multiplayer service. Refresh and retry, or try another network.";
+      }
+    }, 15000);
 
     peer.on("open", id => {
+      if (peer !== thisPeer) return;
+      clearPeerSetupTimer();
       roomCode = id;
       roomCodeDisplay.textContent = id;
-      mpStatus.textContent = "Waiting for opponent...";
+      networkStatus(`host: room registered with signaling server (${id})`);
+      mpStatus.textContent = "Room ready. Waiting for opponent...";
     });
     peer.on("connection", conn => {
+      if (peer !== thisPeer) { try { conn.close(); } catch (_) {} return; }
       if (connection) {
         try { conn.close(); } catch (_) {}
         return;
       }
+      clearPeerSetupTimer();
+      networkStatus("host: incoming guest connection received");
       setupConnection(conn, "host");
     });
     peer.on("error", err => {
+      if (peer !== thisPeer) return;
+      clearPeerSetupTimer();
+      const detail = peerErrorText(err);
+      debugPeerError = detail;
+      networkStatus(`host: PeerJS error (${detail})`);
       if (err && err.type === "unavailable-id") {
-        // Try another short code if a rare collision occurs.
-        createRoom();
+        // Avoid recursive retry loops; choose a fresh ID once after surfacing collision.
+        mpStatus.textContent = "Room code already taken. Creating a new room...";
+        closeNetwork();
+        setTimeout(createRoom, 250);
         return;
       }
-      debugLastMessage = `room error ${err?.type || err?.message || "unknown"}`;
-      mpStatus.textContent = `Room error: ${err?.message || err?.type || "unknown"}`;
+      mpStatus.textContent = `Room error: ${detail}`;
+    });
+    peer.on("disconnected", () => {
+      if (peer !== thisPeer) return;
+      networkStatus("host: signaling server disconnected");
+      mpStatus.textContent = "Lost connection to the multiplayer signaling service. Refresh and retry.";
     });
   }
 
@@ -919,15 +1097,56 @@
     }
     closeNetwork();
     showMpJoin();
-    mpJoinStatus.textContent = "Connecting...";
-    peer = new Peer();
-    peer.on("open", () => {
-      const conn = peer.connect(code, { reliable:true });
-      setupConnection(conn, "guest");
+    mpJoinStatus.textContent = "Connecting to multiplayer signaling service...";
+    networkStatus(`guest: creating PeerJS client for room ${code}`);
+    if (typeof Peer === "undefined") {
+      debugPeerError = "PeerJS library did not load";
+      networkStatus("guest: PeerJS library unavailable");
+      mpJoinStatus.textContent = "Multiplayer library failed to load. Refresh the webpage and try again.";
+      return;
+    }
+    try {
+      peer = new Peer(undefined, { debug: 1 });
+    } catch (err) {
+      debugPeerError = peerErrorText(err);
+      networkStatus("guest: failed to create PeerJS instance");
+      mpJoinStatus.textContent = `Connection error: ${debugPeerError}`;
+      return;
+    }
+    const thisPeer = peer;
+    peerSetupTimer = setTimeout(() => {
+      if (peer === thisPeer && !thisPeer.id) {
+        networkStatus("guest: timed out waiting for PeerJS signaling server");
+        mpJoinStatus.textContent = "Timed out connecting to the multiplayer service. Refresh both devices and retry, or try another network.";
+      }
+    }, 15000);
+
+    peer.on("open", id => {
+      if (peer !== thisPeer) return;
+      clearPeerSetupTimer();
+      networkStatus(`guest: registered with signaling server as ${id}; requesting room ${code}`);
+      mpJoinStatus.textContent = "Signaling connected; contacting room...";
+      try {
+        const conn = peer.connect(code, { reliable:true });
+        setupConnection(conn, "guest");
+      } catch (err) {
+        debugPeerError = peerErrorText(err);
+        networkStatus("guest: failed to create direct connection request");
+        mpJoinStatus.textContent = `Connection error: ${debugPeerError}`;
+      }
     });
     peer.on("error", err => {
-      debugLastMessage = `join error ${err?.type || err?.message || "unknown"}`;
-      mpJoinStatus.textContent = `Connection error: ${err?.message || err?.type || "unknown"}`;
+      if (peer !== thisPeer) return;
+      clearPeerSetupTimer();
+      const detail = peerErrorText(err);
+      debugPeerError = detail;
+      networkStatus(`guest: PeerJS error (${detail})`);
+      mpJoinStatus.textContent = `Connection error: ${detail}`;
+    });
+    peer.on("disconnected", () => {
+      if (peer !== thisPeer) return;
+      networkStatus("guest: signaling server disconnected");
+      mpJoinStatus.textContent = "Lost connection to the multiplayer signaling service. Refresh and retry.";
     });
   }
 
@@ -2024,9 +2243,77 @@
   canvas.addEventListener("mousedown", () => canvas.focus());
   window.addEventListener("blur", () => {
     for (const key of Object.keys(keys)) keys[key] = false;
+    document.querySelectorAll(".touch-key.pressed").forEach(button => button.classList.remove("pressed"));
+    document.querySelectorAll(".touch-key[data-pointer-id]").forEach(button => delete button.dataset.pointerId);
+    touchShoot.classList.remove("pressed");
+    shootPointerId = null;
     charging = false;
     if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
   });
+
+
+  // Show diagnostics only when requested, so they do not cover the pitch on phones.
+  debugToggle.addEventListener("click", () => {
+    const shown = netDebugPanel.classList.toggle("debug-visible");
+    debugToggle.textContent = shown ? "Hide debug" : "Show debug";
+    debugToggle.setAttribute("aria-expanded", String(shown));
+  });
+
+  // Touch controls write into the same key state as the keyboard. The guest still
+  // sends inputs to the host; it never simulates authoritative movement itself.
+  function setTouchKey(key, isDown) {
+    keys[key] = isDown;
+    debugLastMessage = `touch ${key} ${isDown ? "down" : "up"}`;
+    if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
+  }
+  document.querySelectorAll(".touch-key[data-key]").forEach(button => {
+    const key = button.dataset.key;
+    const press = event => {
+      event.preventDefault();
+      if (button.dataset.pointerId !== undefined) return;
+      button.dataset.pointerId = String(event.pointerId);
+      button.classList.add("pressed");
+      try { button.setPointerCapture(event.pointerId); } catch (_) {}
+      setTouchKey(key, true);
+    };
+    const release = event => {
+      if (button.dataset.pointerId === undefined) return;
+      if (event && button.dataset.pointerId !== String(event.pointerId)) return;
+      delete button.dataset.pointerId;
+      button.classList.remove("pressed");
+      setTouchKey(key, false);
+    };
+    button.addEventListener("pointerdown", press);
+    button.addEventListener("pointerup", release);
+    button.addEventListener("pointercancel", release);
+    button.addEventListener("lostpointercapture", release);
+    button.addEventListener("contextmenu", event => event.preventDefault());
+  });
+
+  let shootPointerId = null;
+  function releaseTouchShoot(event) {
+    if (shootPointerId === null) return;
+    if (event && shootPointerId !== event.pointerId) return;
+    shootPointerId = null;
+    touchShoot.classList.remove("pressed");
+    if (charging) shoot();
+    charging = false;
+    if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
+  }
+  touchShoot.addEventListener("pointerdown", event => {
+    event.preventDefault();
+    if (shootPointerId !== null) return;
+    shootPointerId = event.pointerId;
+    touchShoot.classList.add("pressed");
+    try { touchShoot.setPointerCapture(event.pointerId); } catch (_) {}
+    charging = true;
+    if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
+    debugLastMessage = "touch shoot charge started";
+  });
+  touchShoot.addEventListener("pointerup", releaseTouchShoot);
+  touchShoot.addEventListener("pointercancel", releaseTouchShoot);
+  touchShoot.addEventListener("lostpointercapture", releaseTouchShoot);
+  touchShoot.addEventListener("contextmenu", event => event.preventDefault());
 
   cpuBtn.addEventListener("click", () => {
     mainModeChoices.style.display = "none";
