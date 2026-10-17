@@ -60,6 +60,7 @@
   }
   .dash-cooldown-hud.ready { color:#bbf7d0; border-color:#4ade80; }
   .lob-cooldown-hud { position:absolute; left:12px; top:49px; z-index:4; padding:6px 10px; border:1px solid rgba(255,255,255,.65); border-radius:9px; background:rgba(15,23,42,.78); color:#fef3c7; font-size:12px; font-weight:900; letter-spacing:.2px; pointer-events:none; min-width:116px; text-align:center; }
+  .score-area .lob-cooldown-hud { position:static; left:auto; top:auto; min-width:0; padding:4px 8px; font-size:11px; border-radius:7px; white-space:nowrap; }
   .lob-cooldown-hud.ready { color:#bbf7d0; border-color:#4ade80; }
   .dash-cooldown-hud.cooling { color:#fde68a; border-color:#fbbf24; }
   .charge-wrap {
@@ -334,7 +335,6 @@
     #touchControls { margin-top:6px; padding:5px 8px; gap:8px; }
     .touch-joystick { width:104px; height:104px; }
     .shoot-button { min-height:62px; }
-    .lob-cooldown-hud { top:47px; }
   }
 
 </style>
@@ -1486,7 +1486,12 @@
     ball.vy = dy * (lob ? power * 0.78 : power);
     ball.x = entity.x + dx * (entity.r + ball.r + 2);
     ball.y = entity.y + dy * (entity.r + ball.r + 2);
-    if (lob) { ball.z = 1; ball.vz = 5.8 + amount * 3.0; entity.__lobCooldown = 5.0; localLobCooldown = 5.0; }
+    if (lob) {
+      ball.z = 1; ball.vz = 5.8 + amount * 3.0;
+      entity.__lobCooldown = 5.0;
+      const localEntity = gameMode === "multiplayer" ? (localSide === "left" ? player : cpu) : player;
+      if (entity === localEntity) localLobCooldown = 5.0;
+    }
     else { ball.z = 0; ball.vz = 0; }
     return true;
   }
