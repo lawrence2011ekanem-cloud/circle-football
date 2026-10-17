@@ -185,13 +185,29 @@
   #teamDisbandBtn { background:#b91c1c; }
   #teamStatus { min-height:34px; margin:8px 0; }
   @media (max-width: 700px) {
-    .menu-overlay.team-open { display:block; overflow:auto; padding:10px; }
-    .menu-overlay.team-open .menu-card { transform:none; margin:12px 0 12px auto; width:calc(100% - 210px); min-width:0; padding:22px 10px; }
-    .menu-overlay.team-open .menu-card h2 { font-size:25px; }
-    .menu-overlay.team-open #mainModeChoices { gap:4px; }
-    .menu-overlay.team-open #mainModeChoices .modeChoice, .menu-overlay.team-open #teamToggle { min-width:0; width:auto; margin:0; padding:10px 3px !important; font-size:12px; }
-    .menu-overlay.team-open #controlsToggle { min-width:0; width:100%; margin-top:10px; }
-    .team-panel { left:8px; top:10px; transform:none; width:195px; max-height:calc(100% - 20px); padding:12px; }
+    /* On phones, stack the party panel above the menu rather than crushing
+       the menu into a narrow right-hand column. The overlay remains scrollable. */
+    .menu-overlay.team-open {
+      display:flex; flex-direction:column; align-items:stretch; justify-content:flex-start;
+      gap:12px; overflow:auto; padding:max(10px, env(safe-area-inset-top)) 10px 14px;
+    }
+    .menu-overlay.team-open .team-panel {
+      display:block; position:static; order:-1; transform:none; width:100%; max-width:480px;
+      max-height:none; overflow:visible; padding:12px; margin:0 auto;
+    }
+    .menu-overlay.team-open .menu-card {
+      order:1; transform:none; margin:0 auto; width:100%; max-width:480px; min-width:0;
+      padding:20px 12px;
+    }
+    .menu-overlay.team-open .menu-card h2 { font-size:clamp(25px, 7vw, 34px); margin-bottom:14px; }
+    .menu-overlay.team-open #modeSelect > p { font-size:14px; margin-bottom:12px; }
+    .menu-overlay.team-open #mainModeChoices { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:5px; }
+    .menu-overlay.team-open #mainModeChoices .modeChoice,
+    .menu-overlay.team-open #teamToggle {
+      min-width:0; width:100%; margin:0; padding:10px 3px !important;
+      font-size:clamp(11px, 3.1vw, 14px); overflow-wrap:anywhere;
+    }
+    .menu-overlay.team-open #controlsToggle { min-width:0; width:100%; margin-top:10px; padding:11px 8px; }
     .team-panel h3 { font-size:18px; }
     .team-panel p { font-size:12px; }
     .team-code { font-size:17px; letter-spacing:1px; }
@@ -221,6 +237,12 @@
   #cpuBtn:hover { background: #1d4ed8; }
   #multiplayerBtn { background: #7c3aed; }
   #multiplayerBtn:hover { background: #6d28d9; }
+  #searchOpponentsBtn { width:100%; margin-top:10px; padding:12px 14px; background:#047857; }
+  #searchOpponentsBtn:hover { background:#065f46; }
+  #searchOpponentsBtn:disabled { opacity:.7; cursor:wait; }
+  #cancelSearchBtn { width:100%; margin-top:6px; background:#475569; }
+  #mpSearchStatus { margin:10px 0 0; color:#cbd5e1; font-size:13px; line-height:1.45; overflow-wrap:anywhere; }
+  #mpSearchStatus[hidden], #cancelSearchBtn[hidden] { display:none !important; }
   .aiChoice { min-width: 120px; margin: 6px; padding: 13px 20px; font-size: 18px; background: #2563eb; }
   .aiChoice:hover { background: #1d4ed8; }
   #backModeBtn { margin-top: 12px; background: #475569; }
@@ -445,6 +467,9 @@
         <button id="createRoomBtn" type="button">Create Room</button>
         <button id="joinRoomBtn" type="button">Join Room</button>
       </div>
+      <button id="searchOpponentsBtn" type="button">🔎 Search for Opponents</button>
+      <p id="mpSearchStatus" aria-live="polite" hidden></p>
+      <button id="cancelSearchBtn" type="button" hidden>Cancel Search</button>
       <br>
       <button id="mpBackBtn" type="button">Back</button>
     </div>
@@ -577,6 +602,9 @@
   const mpJoin = document.getElementById("mpJoin");
   const createRoomBtn = document.getElementById("createRoomBtn");
   const joinRoomBtn = document.getElementById("joinRoomBtn");
+  const searchOpponentsBtn = document.getElementById("searchOpponentsBtn");
+  const cancelSearchBtn = document.getElementById("cancelSearchBtn");
+  const mpSearchStatus = document.getElementById("mpSearchStatus");
   const mpBackBtn = document.getElementById("mpBackBtn");
   const copyRoomBtn = document.getElementById("copyRoomBtn");
   const cancelRoomBtn = document.getElementById("cancelRoomBtn");
@@ -680,6 +708,10 @@
   let debugPeerError = "none";
   let peerSetupTimer = null;
   let connectionSetupTimer = null;
+  let matchmakingSearchActive = false;
+  let matchmakingSessionActive = false;
+  let matchmakingPollTimer = null;
+  let matchmakingPollBusy = false;
 
   function clearPeerSetupTimer() {
     if (peerSetupTimer !== null) { clearTimeout(peerSetupTimer); peerSetupTimer = null; }
@@ -920,7 +952,23 @@
     mpJoinStatus.textContent = text;
   }
 
+  function setOpponentSearchUI(message = "", searching = false) {
+    mpSearchStatus.textContent = message;
+    mpSearchStatus.hidden = !message;
+    searchOpponentsBtn.disabled = searching;
+    searchOpponentsBtn.textContent = searching ? "Searching…" : "🔎 Search for Opponents";
+    cancelSearchBtn.hidden = !searching;
+  }
+
+  function stopOpponentSearchPolling() {
+    if (matchmakingPollTimer !== null) { clearInterval(matchmakingPollTimer); matchmakingPollTimer = null; }
+    matchmakingPollBusy = false;
+  }
+
   function closeNetwork() {
+    stopOpponentSearchPolling();
+    matchmakingSearchActive = false;
+    matchmakingSessionActive = false;
     clearPeerSetupTimer();
     clearConnectionSetupTimer();
     debugConnectionStage = "idle";
@@ -1035,6 +1083,7 @@
     networkStatus(`${role}: peer found; negotiating direct data connection`);
     if (role === "guest") mpJoinStatus.textContent = "Room found; establishing direct connection...";
     else mpStatus.textContent = "Opponent found; establishing direct connection...";
+    if (matchmakingSessionActive) setOpponentSearchUI("Opponent found! Establishing the direct connection…", true);
 
     connectionSetupTimer = setTimeout(() => {
       if (connection === conn && !conn.open) {
@@ -1044,6 +1093,7 @@
         networkStatus(`${role}: timeout waiting for data connection`);
         if (role === "guest") mpJoinStatus.textContent = message;
         else mpStatus.textContent = message;
+        if (matchmakingSessionActive) setOpponentSearchUI(message + " You can cancel and try again.", true);
       }
     }, 15000);
 
@@ -1051,6 +1101,7 @@
       clearConnectionSetupTimer();
       networkReady = true;
       networkStatus(`${role}: direct data connection open`);
+      if (matchmakingSessionActive) setOpponentSearchUI("Opponent found! Starting your match…", true);
       if (role === "guest") {
         mpJoinStatus.textContent = "Connected. Waiting for host...";
         connection.send({ type:"hello" });
@@ -1266,6 +1317,7 @@
       }
       mpStatus.textContent = "Connection closed.";
       mpJoinStatus.textContent = "Connection closed.";
+      if (matchmakingSessionActive) setOpponentSearchUI("The connection closed. You can search again.", false);
     });
 
     connection.on("error", (err) => {
@@ -1275,11 +1327,153 @@
       networkStatus(`${role}: data connection error`);
       mpStatus.textContent = `Connection error: ${message}`;
       mpJoinStatus.textContent = `Connection error: ${message}`;
+      if (matchmakingSessionActive) setOpponentSearchUI(`Connection error: ${message}. You can search again.`, false);
     });
+  }
+
+  function failOpponentSearch(message, failedPeer = null) {
+    if (failedPeer && peer !== failedPeer) return;
+    stopOpponentSearchPolling();
+    matchmakingSearchActive = false;
+    matchmakingSessionActive = false;
+    clearPeerSetupTimer();
+    clearConnectionSetupTimer();
+    if (connection) { try { connection.close(); } catch (_) {} connection = null; }
+    if (peer) { try { peer.destroy(); } catch (_) {} peer = null; }
+    networkReady = false;
+    multiplayerRole = null;
+    localSide = null;
+    remoteSide = null;
+    roomCode = "";
+    setOpponentSearchUI(message, false);
+  }
+
+  function searchForOpponents() {
+    closeNetwork();
+    showMultiplayerHome();
+    setOpponentSearchUI("Connecting to the matchmaking service…", true);
+    if (typeof Peer === "undefined") {
+      setOpponentSearchUI("The multiplayer library did not load. Refresh and try again.", false);
+      return;
+    }
+
+    // Matchmaking peers use a recognizable prefix so the discovery scan can
+    // ignore ordinary room-code peers. This requires PeerServer peer listing.
+    const searchId = "CFM" + randomRoomCode();
+    matchmakingSearchActive = true;
+    matchmakingSessionActive = true;
+    try {
+      peer = new Peer(searchId, { debug: 1 });
+    } catch (err) {
+      failOpponentSearch("Could not start opponent search: " + (err.message || "connection error"));
+      return;
+    }
+    const thisPeer = peer;
+
+    peerSetupTimer = setTimeout(() => {
+      if (peer === thisPeer && matchmakingSearchActive && !thisPeer.id) {
+        failOpponentSearch("Timed out connecting to matchmaking. Please try again.", thisPeer);
+      }
+    }, 15000);
+
+    thisPeer.on("open", () => {
+      if (peer !== thisPeer || !matchmakingSearchActive) return;
+      clearPeerSetupTimer();
+      setOpponentSearchUI("Searching for an opponent… Keep this screen open. If discovery is not enabled on the server, the search will explain that.", true);
+
+      const scanForPeers = () => {
+        if (peer !== thisPeer || !matchmakingSearchActive || matchmakingPollBusy || thisPeer.destroyed) return;
+        if (typeof thisPeer.listAllPeers !== "function") {
+          failOpponentSearch("Automatic search is unavailable on this PeerJS server. Use Create Room / Join Room for now.", thisPeer);
+          return;
+        }
+        matchmakingPollBusy = true;
+        try {
+          thisPeer.listAllPeers(peers => {
+            matchmakingPollBusy = false;
+            if (peer !== thisPeer || !matchmakingSearchActive) return;
+            const candidates = (Array.isArray(peers) ? peers : [])
+              .filter(id => typeof id === "string" && id.startsWith("CFM") && id !== thisPeer.id)
+              .sort();
+
+            // To avoid both browsers initiating the same match, the lower peer
+            // ID starts the direct connection; the other waits for that request.
+            const candidate = candidates.find(id => thisPeer.id < id);
+            if (!candidate) {
+              if (candidates.length) {
+                setOpponentSearchUI("Another searcher is checking in. Pairing automatically when the connection is ready…", true);
+              }
+              return;
+            }
+
+            stopOpponentSearchPolling();
+            matchmakingSearchActive = false;
+            matchmakingSessionActive = true;
+            setOpponentSearchUI("Opponent found! Connecting…", true);
+            networkStatus("matchmaking: opponent discovered; initiating connection");
+            try {
+              const conn = thisPeer.connect(candidate, { reliable: true });
+              setupConnection(conn, "guest");
+            } catch (err) {
+              failOpponentSearch("Could not connect to that opponent: " + (err.message || "connection error"), thisPeer);
+            }
+          });
+        } catch (err) {
+          matchmakingPollBusy = false;
+          failOpponentSearch("Opponent search could not list other players on this server. Create Room / Join Room still work. Details: " + (err.message || "discovery unavailable"), thisPeer);
+        }
+      };
+
+      scanForPeers();
+      matchmakingPollTimer = setInterval(scanForPeers, 2200);
+    });
+
+    thisPeer.on("connection", conn => {
+      // When a matching peer connects to us, become the authoritative host.
+      if (peer !== thisPeer || (!matchmakingSearchActive && !matchmakingSessionActive) || connection) {
+        try { conn.close(); } catch (_) {}
+        return;
+      }
+      stopOpponentSearchPolling();
+      matchmakingSearchActive = false;
+      matchmakingSessionActive = true;
+      setOpponentSearchUI("Opponent found! Establishing the match…", true);
+      networkStatus("matchmaking: incoming opponent connection received");
+      setupConnection(conn, "host");
+    });
+
+    thisPeer.on("error", err => {
+      if (peer !== thisPeer) return;
+      clearPeerSetupTimer();
+      const detail = peerErrorText(err);
+      if (matchmakingSearchActive) {
+        failOpponentSearch("Automatic opponent search could not use peer discovery on the current PeerJS server. PeerJS Cloud requires peer listing to be enabled; Create Room / Join Room still work. (" + detail + ")", thisPeer);
+      } else if (matchmakingSessionActive) {
+        stopOpponentSearchPolling();
+        matchmakingSearchActive = false;
+        matchmakingSessionActive = false;
+        setOpponentSearchUI("Matchmaking connection error: " + detail + ". You can search again.", false);
+      }
+    });
+
+    thisPeer.on("disconnected", () => {
+      if (peer === thisPeer && matchmakingSearchActive) {
+        failOpponentSearch("Lost the matchmaking service connection. Please try searching again.", thisPeer);
+      }
+    });
+  }
+
+  function cancelOpponentSearch() {
+    stopOpponentSearchPolling();
+    const wasSearching = matchmakingSearchActive || matchmakingSessionActive;
+    closeNetwork();
+    showMultiplayerHome();
+    setOpponentSearchUI(wasSearching ? "Search cancelled." : "", false);
   }
 
   function createRoom() {
     closeNetwork();
+    setOpponentSearchUI("", false);
     showMpCreate();
     mpStatus.textContent = "Connecting to multiplayer signaling service...";
     networkStatus("host: creating PeerJS room");
@@ -1347,6 +1541,7 @@
   }
 
   function joinRoom() {
+    setOpponentSearchUI("", false);
     const code = roomCodeInput.value.trim().toUpperCase();
     if (code.length !== 6) {
       mpJoinStatus.textContent = "Enter the 6-character room code.";
@@ -2774,18 +2969,23 @@
 
   createRoomBtn.addEventListener("click", createRoom);
   joinRoomBtn.addEventListener("click", showMpJoin);
+  searchOpponentsBtn.addEventListener("click", searchForOpponents);
+  cancelSearchBtn.addEventListener("click", cancelOpponentSearch);
   mpBackBtn.addEventListener("click", () => {
     closeNetwork();
+    setOpponentSearchUI("", false);
     multiplayerOverlay.style.display = "none";
     menuOverlay.style.display = "grid";
     gameMode = "cpu";
   });
   cancelRoomBtn.addEventListener("click", () => {
     closeNetwork();
+    setOpponentSearchUI("", false);
     showMultiplayerHome();
   });
   cancelJoinBtn.addEventListener("click", () => {
     closeNetwork();
+    setOpponentSearchUI("", false);
     showMultiplayerHome();
   });
   connectRoomBtn.addEventListener("click", joinRoom);
