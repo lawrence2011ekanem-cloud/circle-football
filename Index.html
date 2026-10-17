@@ -385,7 +385,7 @@
   <div class="top">
     <div>
       <h1>⚽ Circle Football</h1>
-      <div class="hint">WASD / arrows to move • Hold Space to charge • Release to shoot</div>
+      <div class="hint">WASD / joystick to move • Space to dash • Hold left click to charge, release to shoot</div>
     </div>
     <div class="score-area"><div id="timer">1:30</div><div id="score">YOU 0 — 0 CPU</div></div>
   </div>
@@ -418,7 +418,7 @@
       <div class="joystick-label">MOVE</div><div id="joystickKnob" class="joystick-knob"></div>
     </div>
     <div class="touch-actions">
-      <button class="touch-key dash-button" type="button" data-key="shift" aria-label="Dash forward">DASH</button>
+      <button class="touch-key dash-button" type="button" data-key="space" aria-label="Dash forward">DASH</button>
       <button id="touchShoot" class="shoot-button" type="button" aria-label="Hold to charge, release to shoot">HOLD TO<br>CHARGE</button>
       <div class="touch-note">Hold, then release to shoot</div>
     </div>
@@ -877,7 +877,7 @@
           w:!!msg.keys.w, a:!!msg.keys.a, s:!!msg.keys.s, d:!!msg.keys.d,
           up:!!msg.keys.up, down:!!msg.keys.down, left:!!msg.keys.left, right:!!msg.keys.right,
           arrowup:!!msg.keys.arrowup, arrowdown:!!msg.keys.arrowdown,
-          arrowleft:!!msg.keys.arrowleft, arrowright:!!msg.keys.arrowright, shift:!!msg.keys.shift
+          arrowleft:!!msg.keys.arrowleft, arrowright:!!msg.keys.arrowright, shift:!!msg.keys.shift, space:!!msg.keys.space
         };
         if (msg.seq) lastAuthoritativeSeq = Math.max(lastAuthoritativeSeq, Number(msg.seq) || 0);
         remoteCharging = !!msg.charging;
@@ -1177,7 +1177,7 @@
       return;
     }
     const relevant = {};
-    for (const key of ["w","a","s","d","arrowup","arrowdown","arrowleft","arrowright","shift"]) {
+    for (const key of ["w","a","s","d","arrowup","arrowdown","arrowleft","arrowright","shift","space"]) {
       relevant[key] = !!keys[key];
     }
     relevant.up = relevant.arrowup;
@@ -1256,7 +1256,7 @@
   const MAX_CHARGE = 1;
   const CHARGE_RATE = 0.75;
   const MIN_SHOT = 4.0;
-  const MAX_SHOT = 10.5;
+  const MAX_SHOT = 12.5;
   const BALL_FRICTION = 0.985;
   const BALL_MAX_SPEED = 13;
   const CPU_CHARGE_RATE = 1.5;
@@ -1546,17 +1546,17 @@
     // player entity, so multiplayer guests cannot trigger their own physics.
     entity.__dashTime = Math.max(0, (entity.__dashTime || 0) - dt);
     entity.__dashCooldown = Math.max(0, (entity.__dashCooldown || 0) - dt);
-    const dashDown = !!input.shift;
+    const dashDown = !!input.space;
     if (dashDown && !entity.__dashWasDown && len > 0 && entity.__dashCooldown <= 0) {
-      entity.__dashTime = 0.16;
-      entity.__dashCooldown = 1.1;
+      entity.__dashTime = 0.20;
+      entity.__dashCooldown = 5.0;
     }
     entity.__dashWasDown = dashDown;
 
     if (len > 0) {
       dx /= len;
       dy /= len;
-      const dashMultiplier = entity.__dashTime > 0 ? 1.8 : 1;
+      const dashMultiplier = entity.__dashTime > 0 ? 2.2 : 1;
       const moveX = dx * entity.speed * dt * 60 * dashMultiplier;
       const moveY = dy * entity.speed * dt * 60 * dashMultiplier;
 
@@ -2256,9 +2256,7 @@
     keys[key] = true;
     debugLastMessage = `keydown ${key}`;
 
-    if (e.code === "Space" && !charging) {
-      charging = true;
-    }
+    if (e.code === "Space") keys.space = true;
     if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
   });
 
@@ -2266,16 +2264,24 @@
     if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
     const key = e.key.toLowerCase();
     keys[key] = false;
+    if (e.code === "Space") keys.space = false;
     debugLastMessage = `keyup ${key}`;
-
-    if (e.code === "Space") {
-      if (charging) shoot();
-      charging = false;
-    }
     if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
   });
 
-  canvas.addEventListener("mousedown", () => canvas.focus());
+  canvas.addEventListener("mousedown", (e) => {
+    canvas.focus();
+    if (e.button !== 0) return;
+    e.preventDefault();
+    if (!charging) charging = true;
+    if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
+  });
+  window.addEventListener("mouseup", (e) => {
+    if (e.button !== 0 || !charging) return;
+    if (charging) shoot();
+    charging = false;
+    if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
+  });
   window.addEventListener("blur", () => {
     for (const key of Object.keys(keys)) keys[key] = false;
     document.querySelectorAll(".touch-key.pressed").forEach(button => button.classList.remove("pressed"));
