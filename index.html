@@ -59,6 +59,8 @@
     letter-spacing:.3px; pointer-events:none; min-width:116px; text-align:center;
   }
   .dash-cooldown-hud.ready { color:#bbf7d0; border-color:#4ade80; }
+  .lob-cooldown-hud { position:absolute; left:12px; top:49px; z-index:4; padding:6px 10px; border:1px solid rgba(255,255,255,.65); border-radius:9px; background:rgba(15,23,42,.78); color:#fef3c7; font-size:12px; font-weight:900; letter-spacing:.2px; pointer-events:none; min-width:116px; text-align:center; }
+  .lob-cooldown-hud.ready { color:#bbf7d0; border-color:#4ade80; }
   .dash-cooldown-hud.cooling { color:#fde68a; border-color:#fbbf24; }
   .charge-wrap {
     position: absolute;
@@ -294,6 +296,8 @@
   .dash-button { width: min(100%, 150px); min-height: 48px; font-size: 16px; background: #7c3aed; border-color: #c4b5fd; }
   .dash-button.cooling { background:#475569; border-color:#94a3b8; color:#e2e8f0; }
   .dash-button.ready { background:#7c3aed; border-color:#c4b5fd; }
+  .lob-button { width:min(100%,150px); min-height:48px; font-size:15px; background:#0369a1; border-color:#7dd3fc; }
+  .lob-button.cooling { background:#475569; border-color:#94a3b8; color:#e2e8f0; }
   .touch-spacer { pointer-events: none; }
   .touch-actions { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; flex:1; min-width:0; }
   .shoot-button {
@@ -330,6 +334,7 @@
     #touchControls { margin-top:6px; padding:5px 8px; gap:8px; }
     .touch-joystick { width:104px; height:104px; }
     .shoot-button { min-height:62px; }
+    .lob-cooldown-hud { top:47px; }
   }
 
 </style>
@@ -395,7 +400,7 @@
   <div class="top">
     <div>
       <h1>⚽ Circle Football</h1>
-      <div class="hint">WASD / joystick to move • Space to dash • Hold left click to shoot • Hold right click to lob</div>
+      <div class="hint">WASD / joystick to move • Space to dash • Hold left click to shoot • Hold right click to lob (5s cooldown)</div>
     </div>
     <div class="score-area"><div id="timer">1:30</div><div id="score">YOU 0 — 0 CPU</div></div>
   </div>
@@ -404,6 +409,7 @@
     <canvas id="game" width="960" height="540" tabindex="0"></canvas>
 
     <div id="dashCooldownHud" class="dash-cooldown-hud ready">DASH READY · SPACE</div>
+    <div id="lobCooldownHud" class="lob-cooldown-hud ready">LOB READY · RIGHT CLICK</div>
 
     <div class="charge-wrap">
       <div class="charge-label">SHOT POWER</div>
@@ -431,8 +437,9 @@
     </div>
     <div class="touch-actions">
       <button id="touchDashButton" class="touch-key dash-button ready" type="button" data-key="space" aria-label="Dash forward">DASH</button>
+      <button id="touchLobButton" class="touch-key lob-button ready" type="button" aria-label="Hold to charge and release to lob">HOLD TO LOB</button>
       <button id="touchShoot" class="shoot-button" type="button" aria-label="Hold to charge, release to shoot">HOLD TO<br>CHARGE</button>
-      <div class="touch-note">Hold, then release to shoot</div>
+      <div class="touch-note">Hold, then release to shoot or lob</div>
     </div>
   </div>
 
@@ -457,6 +464,8 @@
   const chargeEl = document.getElementById("charge");
   const dashCooldownHud = document.getElementById("dashCooldownHud");
   const touchDashButton = document.getElementById("touchDashButton");
+  const touchLobButton = document.getElementById("touchLobButton");
+  const lobCooldownHud = document.getElementById("lobCooldownHud");
   const touchControls = document.getElementById("touchControls");
   const goalMessage = document.getElementById("goalMessage");
   const resetBtn = document.getElementById("reset");
@@ -536,6 +545,7 @@
   let charging = false;
   let lobCharging = false;
   let lobCharge = 0;
+  let localLobCooldown = 0;
   let charge = 0;
   let lastTime = performance.now();
   let resetTimer = 0;
@@ -718,6 +728,8 @@
 
   function showMultiplayerHome() {
     gameMode = "multiplayer";
+    resetBtn.style.display = "none";
+    resetBtn.style.display = "none";
     menuOverlay.style.display = "none";
     multiplayerOverlay.style.display = "grid";
     mpHome.style.display = "block";
@@ -739,6 +751,7 @@
   }
 
   function enterMultiplayerMatch(authoritativeEndAt = null, authoritativeServerNow = null) {
+    resetBtn.style.display = "none";
     rematchReady = false;
     opponentRematchReady = false;
     gameMode = "multiplayer";
@@ -910,7 +923,7 @@
         const side = msg.side === "left" || msg.side === "right" ? msg.side : remoteSide;
         const entity = side === "left" ? player : cpu;
         const amount = clamp(Number(msg.charge) || 0, 0, 1);
-        const accepted = !!side && performShot(entity, amount);
+        const accepted = !!side && performShot(entity, amount, !!msg.lob);
         debugLastShoot = `request side=${side} accepted=${accepted} charge=${amount.toFixed(2)}`;
         debugLastMessage = `host shoot request side=${side} accepted=${accepted}`;
         if (accepted) {
@@ -1252,6 +1265,7 @@
   }
 
   function showMenu() {
+    resetBtn.style.display = "inline-block";
     rematchReady = false;
     opponentRematchReady = false;
     closeNetwork();
@@ -1330,6 +1344,7 @@
   function startMatch(selectedAI) {
     closeNetwork();
     gameMode = "cpu";
+    resetBtn.style.display = "inline-block";
     aiCount = selectedAI;
     resetMatch();
     menuOverlay.style.display = "none";
@@ -1461,6 +1476,7 @@
   function performShot(entity, amount, lob = false) {
     const kickRange = entity.r + ball.r + (gameMode === "multiplayer" ? 30 : 0);
     if (ball.z > 0.5 || distance(entity.x, entity.y, ball.x, ball.y) > kickRange) return false;
+    if (lob && (entity.__lobCooldown || 0) > 0) return false;
     let dx = ball.x - entity.x, dy = ball.y - entity.y;
     const len = Math.hypot(dx, dy);
     if (len < 0.001) { dx = entity === player ? 1 : -1; dy = 0; }
@@ -1470,18 +1486,20 @@
     ball.vy = dy * (lob ? power * 0.78 : power);
     ball.x = entity.x + dx * (entity.r + ball.r + 2);
     ball.y = entity.y + dy * (entity.r + ball.r + 2);
-    if (lob) { ball.z = 1; ball.vz = 5.8 + amount * 3.0; }
+    if (lob) { ball.z = 1; ball.vz = 5.8 + amount * 3.0; entity.__lobCooldown = 5.0; localLobCooldown = 5.0; }
     else { ball.z = 0; ball.vz = 0; }
     return true;
   }
 
   function shoot(lob = false) {
+    if (lob && localLobCooldown > 0.04) return;
     debugLastShoot = `attempt by ${localSide || "?"}`;
     if (gameMode === "multiplayer") {
       const entity = localSide === "left" ? player : cpu;
       if (multiplayerRole === "guest") {
         if (connection && networkReady) {
           connection.send({ type:"shoot", side: localSide, charge: entity.charge, lob });
+          if (lob) { localLobCooldown = 5.0; entity.__lobCooldown = 5.0; }
           debugLastShoot = `sent request side=${localSide} charge=${entity.charge.toFixed(2)}`;
           debugLastMessage = "guest sent shoot request";
         } else {
@@ -1559,6 +1577,7 @@
     // player entity, so multiplayer guests cannot trigger their own physics.
     entity.__dashTime = Math.max(0, (entity.__dashTime || 0) - dt);
     entity.__dashCooldown = Math.max(0, (entity.__dashCooldown || 0) - dt);
+    entity.__lobCooldown = Math.max(0, (entity.__lobCooldown || 0) - dt);
     const dashDown = !!input.space;
     if (dashDown && !entity.__dashWasDown && len > 0 && entity.__dashCooldown <= 0) {
       entity.__dashTime = 0.20;
@@ -1569,9 +1588,16 @@
     if (len > 0) {
       dx /= len;
       dy /= len;
+      const localEntity = gameMode === "multiplayer" ? (localSide === "left" ? player : cpu) : player;
+      const isCharging = gameMode === "multiplayer"
+        ? (!!entity.__mpCharging || (entity === localEntity && (charging || lobCharging)))
+        : (!!entity.charging || (entity === player && (charging || lobCharging)));
+      // Charging a shot or lob makes movement deliberately heavier, so players
+      // must choose between lining up a powerful kick and escaping pressure.
+      const chargeMultiplier = isCharging ? 0.62 : 1;
       const dashMultiplier = entity.__dashTime > 0 ? 2.2 : 1;
-      const moveX = dx * entity.speed * dt * 60 * dashMultiplier;
-      const moveY = dy * entity.speed * dt * 60 * dashMultiplier;
+      const moveX = dx * entity.speed * dt * 60 * dashMultiplier * chargeMultiplier;
+      const moveY = dy * entity.speed * dt * 60 * dashMultiplier * chargeMultiplier;
 
       if (entity.__dashTime > 0) {
         // Substep dash movement and resolve ball contact during the burst, so
@@ -2099,6 +2125,30 @@
     drawChargeDirection();
   }
 
+  function updateLobCooldownHud(dt) {
+    localLobCooldown = Math.max(0, localLobCooldown - dt);
+    let entity = player;
+    if (gameMode === "multiplayer" && localSide === "right") entity = cpu;
+    const remaining = gameMode === "multiplayer" && multiplayerRole === "guest"
+      ? localLobCooldown : Math.max(localLobCooldown, Number(entity.__lobCooldown) || 0);
+    const onTouchLayout = getComputedStyle(touchControls).display !== "none";
+    if (remaining <= 0.04) {
+      lobCooldownHud.textContent = onTouchLayout ? "LOB READY" : "LOB READY · RIGHT CLICK";
+      lobCooldownHud.classList.add("ready");
+      touchLobButton.textContent = "HOLD TO LOB";
+      touchLobButton.classList.add("ready");
+      touchLobButton.classList.remove("cooling");
+      touchLobButton.setAttribute("aria-label", "Hold to charge and release to lob");
+    } else {
+      lobCooldownHud.textContent = `LOB · ${remaining.toFixed(1)}s`;
+      lobCooldownHud.classList.remove("ready");
+      touchLobButton.textContent = `${remaining.toFixed(1)}s`;
+      touchLobButton.classList.remove("ready");
+      touchLobButton.classList.add("cooling");
+      touchLobButton.setAttribute("aria-label", `Lob ready in ${Math.ceil(remaining)} seconds`);
+    }
+  }
+
   function updateDashCooldownHud() {
     let entity = player;
     if (gameMode === "multiplayer" && localSide === "right") entity = cpu;
@@ -2128,6 +2178,7 @@
 
   function update(dt) {
     updateDashCooldownHud();
+    updateLobCooldownHud(dt);
     if (!gameStarted) {
       draw();
       return;
@@ -2454,6 +2505,32 @@
   touchShoot.addEventListener("lostpointercapture", releaseTouchShoot);
   touchShoot.addEventListener("contextmenu", event => event.preventDefault());
 
+  let lobPointerId = null;
+  function releaseTouchLob(event) {
+    if (lobPointerId === null) return;
+    if (event && lobPointerId !== event.pointerId) return;
+    lobPointerId = null;
+    touchLobButton.classList.remove("pressed");
+    if (lobCharging) shoot(true);
+    lobCharging = false;
+    lobCharge = 0;
+    if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
+  }
+  touchLobButton.addEventListener("pointerdown", event => {
+    event.preventDefault();
+    if (lobPointerId !== null || localLobCooldown > 0.04) return;
+    lobPointerId = event.pointerId;
+    touchLobButton.classList.add("pressed");
+    try { touchLobButton.setPointerCapture(event.pointerId); } catch (_) {}
+    lobCharging = true;
+    lobCharge = 0;
+    if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
+  });
+  touchLobButton.addEventListener("pointerup", releaseTouchLob);
+  touchLobButton.addEventListener("pointercancel", releaseTouchLob);
+  touchLobButton.addEventListener("lostpointercapture", releaseTouchLob);
+  touchLobButton.addEventListener("contextmenu", event => event.preventDefault());
+
   cpuBtn.addEventListener("click", () => {
     mainModeChoices.style.display = "none";
     cpuChoices.style.display = "block";
@@ -2547,7 +2624,12 @@
     showMenu();
   });
 
-  resetBtn.addEventListener("click", resetMatch);
+  resetBtn.addEventListener("click", () => {
+    // Reset Match is a local single-player convenience, not a multiplayer
+    // control one player can use to restart the shared game for both people.
+    if (gameMode === "multiplayer") return;
+    resetMatch();
+  });
 
   resetPositions();
   updateTimerDisplay();
