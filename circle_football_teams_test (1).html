@@ -34,9 +34,12 @@
   .score-stack { display:flex; flex-direction:column; align-items:flex-end; gap:5px; }
   .cooldown-row { display:flex; gap:5px; flex-wrap:wrap; justify-content:flex-end; }
   .cooldown-row .dash-cooldown-hud, .cooldown-row .lob-cooldown-hud { position:static; min-width:0; padding:4px 7px; font-size:11px; border-radius:7px; white-space:nowrap; }
-  #controlsToggle { margin-top:16px; min-width:180px; padding:11px 18px; font-size:16px; background:#0f766e; border:1px solid #5eead4; }
+  #mainModeChoices { display:flex; justify-content:center; align-items:stretch; gap:10px; flex-wrap:nowrap; width:100%; }
+  #mainModeChoices .modeChoice { flex:1 1 0; min-width:0; margin:0; padding:14px 12px; }
+  #teamToggle { flex:1 1 0; min-width:0 !important; margin:0 !important; padding:14px 12px !important; font-size:19px; }
+  #controlsToggle { display:block; width:100%; min-width:0; margin-top:12px; padding:13px 18px; font-size:16px; background:#0f766e; border:1px solid #5eead4; }
   #controlsToggle:hover { background:#115e59; }
-  .menu-controls { margin:12px auto 0; padding:13px 15px; border:1px solid rgba(148,163,184,.35); border-radius:12px; background:rgba(15,23,42,.55); text-align:left; max-width:420px; }
+  .menu-controls { margin:8px auto 0; padding:13px 15px; border:1px solid rgba(148,163,184,.35); border-radius:12px; background:rgba(15,23,42,.55); text-align:left; width:100%; max-width:100%; }
   .menu-controls h3 { margin:0 0 8px; text-align:center; font-size:15px; color:#e2e8f0; }
   .menu-controls[hidden] { display:none !important; }
   .menu-controls p { margin:5px 0; font-size:13px; line-height:1.45; color:#cbd5e1; }
@@ -164,6 +167,35 @@
     display: grid;
     place-items: center;
     background: rgba(17,24,39,.92);
+  }
+  .menu-overlay.team-open { grid-template-columns: 320px minmax(0, 1fr); gap: 18px; padding: 18px; }
+  .menu-overlay.team-open .menu-card { grid-column:2; transform:none; }
+  .team-panel { display:none; position:absolute; left:18px; top:50%; transform:translateY(-50%); width:300px; max-height:calc(100% - 36px); overflow:auto; padding:20px; border:1px solid rgba(148,163,184,.35); border-radius:16px; background:#1f2937; box-shadow:0 18px 45px rgba(0,0,0,.4); text-align:left; }
+  .menu-overlay.team-open .team-panel { display:block; }
+  .team-panel h3 { margin:0 0 8px; font-size:22px; text-align:center; }
+  .team-panel p { color:#cbd5e1; font-size:13px; line-height:1.45; }
+  .team-code { padding:10px; margin:12px 0; border-radius:9px; background:#111827; text-align:center; font-size:23px; font-weight:800; letter-spacing:3px; overflow-wrap:anywhere; }
+  .team-roster { list-style:none; margin:12px 0; padding:0; }
+  .team-roster li { padding:9px 10px; margin:5px 0; background:#334155; border-radius:8px; }
+  .team-panel input { width:100%; margin:5px 0 8px; padding:11px; border:1px solid #64748b; border-radius:8px; background:#0f172a; color:#f8fafc; font-size:16px; }
+  .team-panel button { width:100%; margin:5px 0; padding:10px 12px; }
+  #teamCreateBtn { background:#15803d; }
+  #teamJoinBtn { background:#2563eb; }
+  #teamLeaveBtn { background:#b45309; }
+  #teamDisbandBtn { background:#b91c1c; }
+  #teamStatus { min-height:34px; margin:8px 0; }
+  @media (max-width: 700px) {
+    .menu-overlay.team-open { display:block; overflow:auto; padding:10px; }
+    .menu-overlay.team-open .menu-card { transform:none; margin:12px 0 12px auto; width:calc(100% - 210px); min-width:0; padding:22px 10px; }
+    .menu-overlay.team-open .menu-card h2 { font-size:25px; }
+    .menu-overlay.team-open #mainModeChoices { gap:4px; }
+    .menu-overlay.team-open #mainModeChoices .modeChoice, .menu-overlay.team-open #teamToggle { min-width:0; width:auto; margin:0; padding:10px 3px !important; font-size:12px; }
+    .menu-overlay.team-open #controlsToggle { min-width:0; width:100%; margin-top:10px; }
+    .team-panel { left:8px; top:10px; transform:none; width:195px; max-height:calc(100% - 20px); padding:12px; }
+    .team-panel h3 { font-size:18px; }
+    .team-panel p { font-size:12px; }
+    .team-code { font-size:17px; letter-spacing:1px; }
+    .team-panel button { padding:9px 5px; font-size:12px; }
   }
   .menu-card {
     text-align: center;
@@ -328,7 +360,7 @@
     .score-stack { gap:4px; }
     .cooldown-row { gap:4px; }
     .cooldown-row .dash-cooldown-hud, .cooldown-row .lob-cooldown-hud { padding:3px 5px; font-size:10px; }
-    #controlsToggle { margin-top:14px; min-width: min(180px, 60vw); padding:10px 16px; }
+    #controlsToggle { margin-top:10px; min-width:0; width:100%; padding:10px 16px; }
     .menu-controls { margin-top:10px; padding:11px 12px; max-width:100%; }
     .menu-controls p { font-size:12px; }
     #timer { font-size:18px; min-width:40px; }
@@ -366,6 +398,7 @@
       <div id="mainModeChoices">
         <button id="cpuBtn" class="modeChoice" type="button">CPU</button>
         <button id="multiplayerBtn" class="modeChoice" type="button">Multiplayer</button>
+        <button id="teamToggle" type="button" style="background:#9333ea;">👥 Party</button>
       </div>
       <div id="cpuChoices" style="display:none;">
         <p>How many AI do you want to play against?</p>
@@ -385,6 +418,22 @@
       </div>
     </div>
   </div>
+  <aside id="teamPanel" class="team-panel" aria-label="Team party">
+    <h3>👥 Team Party</h3>
+    <p id="teamIntro">Create a party and share its code. Up to 4 players can join.</p>
+    <div><strong>Party code</strong></div>
+    <div id="teamCode" class="team-code">------</div>
+    <button id="teamCreateBtn" type="button">Create Party</button>
+    <hr style="border-color:#475569;margin:14px 0;">
+    <label for="teamCodeInput"><strong>Join a team</strong></label>
+    <input id="teamCodeInput" maxlength="6" placeholder="Enter party code" autocomplete="off" />
+    <button id="teamJoinBtn" type="button">Join Team</button>
+    <p id="teamStatus" aria-live="polite">Not in a party yet.</p>
+    <div><strong>Players (<span id="teamCount">0</span>/4)</strong></div>
+    <ul id="teamRoster" class="team-roster"><li>Not in a party</li></ul>
+    <button id="teamLeaveBtn" type="button" hidden>Leave Party</button>
+    <button id="teamDisbandBtn" type="button" hidden>Disband Party</button>
+  </aside>
 </div>
 
 <div id="multiplayerOverlay" class="mp-overlay">
@@ -506,6 +555,17 @@
   const backModeBtn = document.getElementById("backModeBtn");
   const controlsToggle = document.getElementById("controlsToggle");
   const menuControlsPanel = document.getElementById("menuControlsPanel");
+  const teamToggle = document.getElementById("teamToggle");
+  const teamCodeEl = document.getElementById("teamCode");
+  const teamCodeInput = document.getElementById("teamCodeInput");
+  const teamCreateBtn = document.getElementById("teamCreateBtn");
+  const teamJoinBtn = document.getElementById("teamJoinBtn");
+  const teamStatus = document.getElementById("teamStatus");
+  const teamRosterEl = document.getElementById("teamRoster");
+  const teamCountEl = document.getElementById("teamCount");
+  const teamLeaveBtn = document.getElementById("teamLeaveBtn");
+  const teamDisbandBtn = document.getElementById("teamDisbandBtn");
+  const teamIntro = document.getElementById("teamIntro");
   const aiChoices = document.querySelectorAll(".aiChoice");
   const countdownEl = document.getElementById("countdown");
   const fulltimeControls = document.getElementById("fulltimeControls");
@@ -704,6 +764,135 @@
     for (let i = 0; i < 6; i++) code += ROOM_CHARS[Math.floor(Math.random() * ROOM_CHARS.length)];
     return code;
   }
+
+  // --- Lightweight party system (separate from the 1v1 match connection) ---
+  let teamPeer = null;
+  let teamLeader = false;
+  let teamPartyCode = "";
+  let teamConnections = new Map();
+  let teamRoster = [];
+  let teamSelfName = "Player";
+  let teamClientConn = null;
+  let teamMemberId = "";
+
+  function teamSetStatus(message) { teamStatus.textContent = message; }
+  function teamRender() {
+    teamCodeEl.textContent = teamPartyCode || "------";
+    teamCountEl.textContent = String(teamRoster.length);
+    teamRosterEl.replaceChildren();
+    if (!teamRoster.length) {
+      const li = document.createElement("li"); li.textContent = "Not in a party"; teamRosterEl.appendChild(li);
+    } else {
+      teamRoster.forEach((person, index) => {
+        const li = document.createElement("li");
+        li.textContent = person.name + (index === 0 ? " · Leader" : "");
+        teamRosterEl.appendChild(li);
+      });
+    }
+    teamCreateBtn.hidden = !!teamPartyCode;
+    teamJoinBtn.hidden = !!teamPartyCode;
+    teamCodeInput.hidden = !!teamPartyCode;
+    teamLeaveBtn.hidden = !teamPartyCode || teamLeader;
+    teamDisbandBtn.hidden = !teamPartyCode || !teamLeader;
+    teamIntro.textContent = teamPartyCode ? (teamLeader ? "You are the party leader. Share this code with up to 3 players." : "You're in a party. Share the code with your friends.") : "Create a party and share its code. Up to 4 players can join.";
+  }
+  function teamSendRoster() {
+    const packet = { type: "party-state", code: teamPartyCode, roster: teamRoster };
+    for (const conn of teamConnections.values()) { if (conn.open) conn.send(packet); }
+  }
+  function teamCleanup(message = "Not in a party yet.") {
+    if (teamClientConn) { try { teamClientConn.close(); } catch (_) {} }
+    teamClientConn = null;
+    if (teamPeer) { try { teamPeer.destroy(); } catch (_) {} }
+    teamPeer = null; teamConnections = new Map(); teamRoster = [];
+    teamLeader = false; teamPartyCode = ""; teamMemberId = "";
+    teamRender(); teamSetStatus(message);
+  }
+  function teamCreateParty() {
+    teamCleanup();
+    if (typeof Peer === "undefined") { teamSetStatus("Party service did not load. Refresh and try again."); return; }
+    teamPartyCode = randomRoomCode();
+    teamLeader = true;
+    teamRoster = [{ id: "leader", name: "Player" }];
+    teamRender(); teamSetStatus("Creating party code...");
+    try { teamPeer = new Peer(teamPartyCode, { debug: 0 }); }
+    catch (err) { teamCleanup("Could not create party: " + (err.message || "connection error")); return; }
+    const thisPeer = teamPeer;
+    thisPeer.on("open", id => {
+      if (teamPeer !== thisPeer) return;
+      teamPartyCode = id; teamCodeEl.textContent = id;
+      teamSetStatus("Party ready. Waiting for players..."); teamRender();
+    });
+    thisPeer.on("connection", conn => {
+      if (teamPeer !== thisPeer) { try { conn.close(); } catch (_) {} return; }
+      if (teamRoster.length >= 4) { conn.on("open", () => conn.send({ type:"party-error", message:"This party is full (4 players max)." })); setTimeout(() => { try { conn.close(); } catch (_) {} }, 1000); return; }
+      const id = conn.peer;
+      conn.on("open", () => {
+        if (teamRoster.length >= 4) { conn.send({type:"party-error", message:"This party is full (4 players max)."}); conn.close(); return; }
+        teamConnections.set(id, conn);
+        teamRoster.push({ id, name:"Player" });
+        conn.send({ type:"party-state", code:teamPartyCode, roster:teamRoster });
+        teamSendRoster(); teamRender(); teamSetStatus("A player joined your party.");
+      });
+      conn.on("data", data => {
+        if (!data || typeof data !== "object") return;
+        if (data.type === "party-leave") {
+          teamConnections.delete(id); teamRoster = teamRoster.filter(p => p.id !== id);
+          teamSendRoster(); teamRender(); teamSetStatus("A player left the party.");
+        }
+      });
+      conn.on("close", () => {
+        if (teamConnections.has(id)) { teamConnections.delete(id); teamRoster = teamRoster.filter(p => p.id !== id); teamSendRoster(); teamRender(); }
+      });
+      conn.on("error", () => {});
+    });
+    thisPeer.on("error", err => { if (teamPeer === thisPeer) teamSetStatus("Party error: " + (err.message || err.type || "connection failed")); });
+  }
+  function teamJoinParty() {
+    const code = teamCodeInput.value.trim().toUpperCase();
+    if (code.length !== 6) { teamSetStatus("Enter the 6-character party code."); return; }
+    teamCleanup();
+    if (typeof Peer === "undefined") { teamSetStatus("Party service did not load. Refresh and try again."); return; }
+    teamSetStatus("Connecting to party...");
+    try { teamPeer = new Peer(undefined, { debug: 0 }); }
+    catch (err) { teamSetStatus("Could not connect: " + (err.message || "connection error")); return; }
+    const thisPeer = teamPeer;
+    thisPeer.on("open", () => {
+      if (teamPeer !== thisPeer) return;
+      teamClientConn = thisPeer.connect(code, { reliable:true });
+      const conn = teamClientConn;
+      conn.on("open", () => { if (teamClientConn !== conn) return; teamPartyCode = code; teamLeader = false; teamMemberId = thisPeer.id; conn.send({type:"party-join", name:"Player"}); teamSetStatus("Connected! Joining party..."); });
+      conn.on("data", data => {
+        if (!data || typeof data !== "object") return;
+        if (data.type === "party-state") { teamPartyCode = data.code || code; teamRoster = Array.isArray(data.roster) ? data.roster : []; teamRender(); teamSetStatus("You're in the party!"); }
+        if (data.type === "party-error") { teamSetStatus(data.message || "Could not join party."); teamCleanup(data.message || "Could not join party."); }
+        if (data.type === "party-disbanded") teamCleanup("The party was disbanded by its leader.");
+      });
+      conn.on("close", () => { if (teamClientConn === conn && teamPartyCode) teamCleanup("Connection to party ended."); });
+      conn.on("error", err => teamSetStatus("Party connection error: " + (err.message || "try again")));
+    });
+    thisPeer.on("error", err => { if (teamPeer === thisPeer && !teamPartyCode) teamSetStatus("Couldn't join party: " + (err.message || err.type || "check the code")); });
+  }
+  function teamLeaveParty() {
+    if (teamLeader) return;
+    if (teamClientConn && teamClientConn.open) { try { teamClientConn.send({type:"party-leave"}); } catch (_) {} }
+    teamCleanup("You left the party.");
+  }
+  function teamDisbandParty() {
+    if (!teamLeader) return;
+    for (const conn of teamConnections.values()) { if (conn.open) { try { conn.send({type:"party-disbanded"}); } catch (_) {} } setTimeout(() => { try { conn.close(); } catch (_) {} }, 250); }
+    teamCleanup("Party disbanded.");
+  }
+  teamToggle.addEventListener("click", () => {
+    const opened = menuOverlay.classList.toggle("team-open");
+    teamToggle.setAttribute("aria-expanded", String(opened));
+    if (opened) teamRender();
+  });
+  teamCreateBtn.addEventListener("click", teamCreateParty);
+  teamJoinBtn.addEventListener("click", teamJoinParty);
+  teamCodeInput.addEventListener("keydown", e => { if (e.key === "Enter") teamJoinParty(); });
+  teamLeaveBtn.addEventListener("click", teamLeaveParty);
+  teamDisbandBtn.addEventListener("click", teamDisbandParty);
 
   function controlledEntity() {
     return localSide === "right" ? cpu : player;
