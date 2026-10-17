@@ -52,6 +52,14 @@
     display: block;
     cursor: crosshair;
   }
+  .dash-cooldown-hud {
+    position:absolute; left:12px; top:12px; z-index:4;
+    padding:7px 11px; border:1px solid rgba(255,255,255,.7); border-radius:10px;
+    background:rgba(15,23,42,.86); color:#f8fafc; font-size:13px; font-weight:900;
+    letter-spacing:.3px; pointer-events:none; min-width:116px; text-align:center;
+  }
+  .dash-cooldown-hud.ready { color:#bbf7d0; border-color:#4ade80; }
+  .dash-cooldown-hud.cooling { color:#fde68a; border-color:#fbbf24; }
   .charge-wrap {
     position: absolute;
     left: 50%;
@@ -393,6 +401,8 @@
   <div class="game-shell">
     <canvas id="game" width="960" height="540" tabindex="0"></canvas>
 
+    <div id="dashCooldownHud" class="dash-cooldown-hud ready">DASH READY · SPACE</div>
+
     <div class="charge-wrap">
       <div class="charge-label">SHOT POWER</div>
       <div class="bar"><div id="charge"></div></div>
@@ -443,6 +453,7 @@
   const scoreEl = document.getElementById("score");
   const timerEl = document.getElementById("timer");
   const chargeEl = document.getElementById("charge");
+  const dashCooldownHud = document.getElementById("dashCooldownHud");
   const goalMessage = document.getElementById("goalMessage");
   const resetBtn = document.getElementById("reset");
   const menuOverlay = document.getElementById("menuOverlay");
@@ -938,6 +949,8 @@
         const oldLocalX = localBefore.x, oldLocalY = localBefore.y;
         player.x = msg.player.x; player.y = msg.player.y;
         cpu.x = msg.cpu.x; cpu.y = msg.cpu.y;
+        player.__dashCooldown = Math.max(0, Number(msg.player.dashCooldown) || 0);
+        cpu.__dashCooldown = Math.max(0, Number(msg.cpu.dashCooldown) || 0);
         const localAfter = localSide === "left" ? player : cpu;
         debugLocalMove = `snapshot Δ ${Math.hypot(localAfter.x-oldLocalX, localAfter.y-oldLocalY).toFixed(2)} px`;
         ball.x = msg.ball.x; ball.y = msg.ball.y;
@@ -1216,8 +1229,8 @@
       remoteSide,
       remoteInput: { ...remoteInput },
       serverNow: Date.now(),
-      player:{x:player.x,y:player.y},
-      cpu:{x:cpu.x,y:cpu.y},
+      player:{x:player.x,y:player.y,dashCooldown:player.__dashCooldown || 0},
+      cpu:{x:cpu.x,y:cpu.y,dashCooldown:cpu.__dashCooldown || 0},
       ball:{x:ball.x,y:ball.y,vx:ball.vx,vy:ball.vy},
       youScore, cpuScore, leftScore: youScore, rightScore: cpuScore,
       matchTime, matchEndAt, matchOver, countdownTimer, goTimer, resetTimer,
@@ -2076,7 +2089,23 @@
     drawChargeDirection();
   }
 
+  function updateDashCooldownHud() {
+    let entity = player;
+    if (gameMode === "multiplayer" && localSide === "right") entity = cpu;
+    const remaining = Math.max(0, Number(entity.__dashCooldown) || 0);
+    if (remaining <= 0.04) {
+      dashCooldownHud.textContent = "DASH READY · SPACE";
+      dashCooldownHud.classList.add("ready");
+      dashCooldownHud.classList.remove("cooling");
+    } else {
+      dashCooldownHud.textContent = `DASH · ${remaining.toFixed(1)}s`;
+      dashCooldownHud.classList.add("cooling");
+      dashCooldownHud.classList.remove("ready");
+    }
+  }
+
   function update(dt) {
+    updateDashCooldownHud();
     if (!gameStarted) {
       draw();
       return;
