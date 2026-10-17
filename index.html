@@ -29,7 +29,13 @@
   }
   h1 { margin: 0; font-size: 24px; }
   .hint { color: #cbd5e1; font-size: 14px; }
-  .score-area { display: flex; align-items: center; gap: 18px; }
+  .score-area { display: flex; align-items: center; gap: 12px; }
+  .score-stack { display:flex; flex-direction:column; align-items:flex-end; gap:5px; }
+  .cooldown-row { display:flex; gap:5px; flex-wrap:wrap; justify-content:flex-end; }
+  .cooldown-row .dash-cooldown-hud, .cooldown-row .lob-cooldown-hud { position:static; min-width:0; padding:4px 7px; font-size:11px; border-radius:7px; white-space:nowrap; }
+  .menu-controls { margin-top:18px; padding:13px 15px; border:1px solid rgba(148,163,184,.35); border-radius:12px; background:rgba(15,23,42,.55); text-align:left; }
+  .menu-controls h3 { margin:0 0 8px; text-align:center; font-size:15px; color:#e2e8f0; }
+  .menu-controls p { margin:5px 0; font-size:13px; line-height:1.45; color:#cbd5e1; }
   #timer { font-variant-numeric: tabular-nums; min-width: 48px; text-align: center; font-weight: 900; font-size: 22px; }
 
   #score {
@@ -315,6 +321,11 @@
     h1 { font-size: clamp(16px, 4.4vw, 22px); }
     .hint { font-size: 11px; line-height:1.35; max-width: 48vw; }
     .score-area { gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+    .score-stack { gap:4px; }
+    .cooldown-row { gap:4px; }
+    .cooldown-row .dash-cooldown-hud, .cooldown-row .lob-cooldown-hud { padding:3px 5px; font-size:10px; }
+    .menu-controls { margin-top:14px; padding:11px 12px; }
+    .menu-controls p { font-size:12px; }
     #timer { font-size:18px; min-width:40px; }
     #score { font-size: clamp(12px, 3.4vw, 16px); }
     .game-shell { border-radius:8px; }
@@ -358,6 +369,14 @@
         <br>
         <button id="backModeBtn" type="button">Back</button>
       </div>
+      <div class="menu-controls" aria-label="Game controls">
+        <h3>🎮 Controls</h3>
+        <p><strong>Move:</strong> WASD / arrow keys, or mobile joystick</p>
+        <p><strong>Dash:</strong> Space / mobile DASH button (5-second cooldown)</p>
+        <p><strong>Normal shot:</strong> Hold and release left-click / HOLD TO CHARGE</p>
+        <p><strong>Lob pass:</strong> Hold and release right-click / HOLD TO LOB (5-second cooldown)</p>
+        <p>Charging slows your movement. Airborne balls cannot be touched or score until they land.</p>
+      </div>
     </div>
   </div>
 </div>
@@ -398,18 +417,21 @@
 
 <div class="wrap">
   <div class="top">
-    <div>
-      <h1>⚽ Circle Football</h1>
-      <div class="hint">WASD / joystick to move • Space to dash • Hold left click to shoot • Hold right click to lob (5s cooldown)</div>
+    <div aria-hidden="true"></div>
+    <div class="score-area">
+      <div id="timer">1:30</div>
+      <div class="score-stack">
+        <div id="score">YOU 0 — 0 CPU</div>
+        <div class="cooldown-row" aria-label="Ability cooldowns">
+          <div id="dashCooldownHud" class="dash-cooldown-hud ready">DASH READY · SPACE</div>
+          <div id="lobCooldownHud" class="lob-cooldown-hud ready">LOB READY · RIGHT CLICK</div>
+        </div>
+      </div>
     </div>
-    <div class="score-area"><div id="timer">1:30</div><div id="score">YOU 0 — 0 CPU</div></div>
   </div>
 
   <div class="game-shell">
     <canvas id="game" width="960" height="540" tabindex="0"></canvas>
-
-    <div id="dashCooldownHud" class="dash-cooldown-hud ready">DASH READY · SPACE</div>
-    <div id="lobCooldownHud" class="lob-cooldown-hud ready">LOB READY · RIGHT CLICK</div>
 
     <div class="charge-wrap">
       <div class="charge-label">SHOT POWER</div>
