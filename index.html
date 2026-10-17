@@ -263,13 +263,18 @@
     -webkit-user-select: none;
     touch-action: none;
   }
-  .touch-pad {
-    display: grid;
-    grid-template-columns: repeat(3, clamp(42px, 13vw, 58px));
-    grid-template-rows: repeat(3, clamp(42px, 13vw, 58px));
-    gap: 4px;
-    flex: 0 0 auto;
+  .touch-joystick {
+    position:relative; width:clamp(118px, 34vw, 154px); height:clamp(118px, 34vw, 154px);
+    border-radius:50%; flex:0 0 auto; border:2px solid #64748b;
+    background:radial-gradient(circle, rgba(71,85,105,.55), rgba(15,23,42,.85));
+    touch-action:none; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent;
   }
+  .joystick-knob {
+    position:absolute; left:50%; top:50%; width:44%; height:44%; border-radius:50%;
+    transform:translate(-50%,-50%); border:2px solid #cbd5e1; background:rgba(148,163,184,.85);
+    box-shadow:0 2px 8px rgba(0,0,0,.35); pointer-events:none;
+  }
+  .joystick-label { position:absolute; inset:0; display:grid; place-items:center; color:#e2e8f0; font-size:10px; font-weight:800; opacity:.55; pointer-events:none; }
   .touch-key {
     display: flex; align-items: center; justify-content: center;
     padding: 0; margin: 0; border-radius: 12px;
@@ -278,6 +283,7 @@
     -webkit-tap-highlight-color: transparent;
   }
   .touch-key.pressed, .shoot-button.pressed { background: #2563eb; transform: scale(.97); }
+  .dash-button { width: min(100%, 150px); min-height: 48px; font-size: 16px; background: #7c3aed; border-color: #c4b5fd; }
   .touch-spacer { pointer-events: none; }
   .touch-actions { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; flex:1; min-width:0; }
   .shoot-button {
@@ -311,8 +317,8 @@
     .top { margin-top: 26px; margin-bottom: 4px; }
     .hint { display:none; }
     .game-shell { max-height: min(58vh, 360px); }
-    #touchControls { margin-top:6px; padding:5px 8px; }
-    .touch-pad { grid-template-columns:repeat(3, 40px); grid-template-rows:repeat(3, 34px); }
+    #touchControls { margin-top:6px; padding:5px 8px; gap:8px; }
+    .touch-joystick { width:104px; height:104px; }
     .shoot-button { min-height:62px; }
   }
 
@@ -408,12 +414,11 @@
   </div>
 
   <div id="touchControls" aria-label="Touch controls">
-    <div class="touch-pad" aria-label="Movement">
-      <div class="touch-spacer"></div><button class="touch-key" type="button" data-key="arrowup" aria-label="Move up">▲</button><div class="touch-spacer"></div>
-      <button class="touch-key" type="button" data-key="arrowleft" aria-label="Move left">◀</button><div class="touch-spacer"></div><button class="touch-key" type="button" data-key="arrowright" aria-label="Move right">▶</button>
-      <div class="touch-spacer"></div><button class="touch-key" type="button" data-key="arrowdown" aria-label="Move down">▼</button><div class="touch-spacer"></div>
+    <div id="touchJoystick" class="touch-joystick" aria-label="Movement joystick" role="application">
+      <div class="joystick-label">MOVE</div><div id="joystickKnob" class="joystick-knob"></div>
     </div>
     <div class="touch-actions">
+      <button class="touch-key dash-button" type="button" data-key="shift" aria-label="Dash forward">DASH</button>
       <button id="touchShoot" class="shoot-button" type="button" aria-label="Hold to charge, release to shoot">HOLD TO<br>CHARGE</button>
       <div class="touch-note">Hold, then release to shoot</div>
     </div>
@@ -583,7 +588,7 @@
   let roomCode = "";
   let networkReady = false;
   let remoteSide = null;
-  let remoteInput = { w:false, a:false, s:false, d:false, up:false, down:false, left:false, right:false, space:false };
+  let remoteInput = { w:false, a:false, s:false, d:false, up:false, down:false, left:false, right:false, space:false, shift:false };
   let remoteCharging = false;
   let remoteCharge = 0;
   let networkSendTimer = 0;
@@ -677,7 +682,7 @@
     multiplayerRole = null;
     localSide = null;
     remoteSide = null;
-    remoteInput = { w:false, a:false, s:false, d:false, up:false, down:false, left:false, right:false, space:false };
+    remoteInput = { w:false, a:false, s:false, d:false, up:false, down:false, left:false, right:false, space:false, shift:false };
     remoteCharging = false;
     remoteCharge = 0;
     networkSendTimer = 0;
@@ -872,7 +877,7 @@
           w:!!msg.keys.w, a:!!msg.keys.a, s:!!msg.keys.s, d:!!msg.keys.d,
           up:!!msg.keys.up, down:!!msg.keys.down, left:!!msg.keys.left, right:!!msg.keys.right,
           arrowup:!!msg.keys.arrowup, arrowdown:!!msg.keys.arrowdown,
-          arrowleft:!!msg.keys.arrowleft, arrowright:!!msg.keys.arrowright
+          arrowleft:!!msg.keys.arrowleft, arrowright:!!msg.keys.arrowright, shift:!!msg.keys.shift
         };
         if (msg.seq) lastAuthoritativeSeq = Math.max(lastAuthoritativeSeq, Number(msg.seq) || 0);
         remoteCharging = !!msg.charging;
@@ -1172,7 +1177,7 @@
       return;
     }
     const relevant = {};
-    for (const key of ["w","a","s","d","arrowup","arrowdown","arrowleft","arrowright"]) {
+    for (const key of ["w","a","s","d","arrowup","arrowdown","arrowleft","arrowright","shift"]) {
       relevant[key] = !!keys[key];
     }
     relevant.up = relevant.arrowup;
@@ -1536,13 +1541,43 @@
     if (input.a || input.left || input.arrowleft) dx -= 1;
     if (input.d || input.right || input.arrowright) dx += 1;
     const len = Math.hypot(dx, dy);
+
+    // Short, directional burst. The cooldown is stored on the authoritative
+    // player entity, so multiplayer guests cannot trigger their own physics.
+    entity.__dashTime = Math.max(0, (entity.__dashTime || 0) - dt);
+    entity.__dashCooldown = Math.max(0, (entity.__dashCooldown || 0) - dt);
+    const dashDown = !!input.shift;
+    if (dashDown && !entity.__dashWasDown && len > 0 && entity.__dashCooldown <= 0) {
+      entity.__dashTime = 0.16;
+      entity.__dashCooldown = 1.1;
+    }
+    entity.__dashWasDown = dashDown;
+
     if (len > 0) {
       dx /= len;
       dy /= len;
-      entity.x += dx * entity.speed * dt * 60;
-      entity.y += dy * entity.speed * dt * 60;
+      const dashMultiplier = entity.__dashTime > 0 ? 1.8 : 1;
+      const moveX = dx * entity.speed * dt * 60 * dashMultiplier;
+      const moveY = dy * entity.speed * dt * 60 * dashMultiplier;
+
+      if (entity.__dashTime > 0) {
+        // Substep dash movement and resolve ball contact during the burst, so
+        // the player cannot jump across the ball in a single large movement.
+        const steps = Math.max(1, Math.ceil(Math.hypot(moveX, moveY) / 3));
+        for (let i = 0; i < steps; i++) {
+          entity.x += moveX / steps;
+          entity.y += moveY / steps;
+          clampPlayerToField(entity);
+          resolveBallPlayerCollision(entity);
+        }
+      } else {
+        entity.x += moveX;
+        entity.y += moveY;
+        clampPlayerToField(entity);
+      }
+    } else {
+      clampPlayerToField(entity);
     }
-    clampPlayerToField(entity);
   }
 
   function movePlayer(dt) {
@@ -2266,6 +2301,48 @@
     debugLastMessage = `touch ${key} ${isDown ? "down" : "up"}`;
     if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
   }
+  // Virtual joystick maps its direction to the same arrow-key inputs used by keyboard movement.
+  const touchJoystick = document.getElementById("touchJoystick");
+  const joystickKnob = document.getElementById("joystickKnob");
+  let joystickPointerId = null;
+  function updateJoystick(event) {
+    const rect = touchJoystick.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+    const max = rect.width * 0.29;
+    let dx = event.clientX - cx, dy = event.clientY - cy;
+    const length = Math.hypot(dx, dy);
+    if (length > max) { dx = dx / length * max; dy = dy / length * max; }
+    joystickKnob.style.left = `calc(50% + ${dx}px)`;
+    joystickKnob.style.top = `calc(50% + ${dy}px)`;
+    const nx = dx / max, ny = dy / max;
+    setTouchKey("arrowleft", nx < -0.28);
+    setTouchKey("arrowright", nx > 0.28);
+    setTouchKey("arrowup", ny < -0.28);
+    setTouchKey("arrowdown", ny > 0.28);
+  }
+  function resetJoystick() {
+    joystickPointerId = null;
+    joystickKnob.style.left = "50%"; joystickKnob.style.top = "50%";
+    for (const key of ["arrowup","arrowdown","arrowleft","arrowright"]) setTouchKey(key, false);
+  }
+  touchJoystick.addEventListener("pointerdown", event => {
+    event.preventDefault();
+    if (joystickPointerId !== null) return;
+    joystickPointerId = event.pointerId;
+    try { touchJoystick.setPointerCapture(event.pointerId); } catch (_) {}
+    updateJoystick(event);
+  });
+  touchJoystick.addEventListener("pointermove", event => {
+    if (event.pointerId !== joystickPointerId) return;
+    event.preventDefault(); updateJoystick(event);
+  });
+  for (const type of ["pointerup","pointercancel","lostpointercapture"]) {
+    touchJoystick.addEventListener(type, event => {
+      if (joystickPointerId !== null && event.pointerId !== joystickPointerId) return;
+      resetJoystick();
+    });
+  }
+
   document.querySelectorAll(".touch-key[data-key]").forEach(button => {
     const key = button.dataset.key;
     const press = event => {
