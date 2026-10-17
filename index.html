@@ -292,6 +292,8 @@
   }
   .touch-key.pressed, .shoot-button.pressed { background: #2563eb; transform: scale(.97); }
   .dash-button { width: min(100%, 150px); min-height: 48px; font-size: 16px; background: #7c3aed; border-color: #c4b5fd; }
+  .dash-button.cooling { background:#475569; border-color:#94a3b8; color:#e2e8f0; }
+  .dash-button.ready { background:#7c3aed; border-color:#c4b5fd; }
   .touch-spacer { pointer-events: none; }
   .touch-actions { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; flex:1; min-width:0; }
   .shoot-button {
@@ -428,7 +430,7 @@
       <div class="joystick-label">MOVE</div><div id="joystickKnob" class="joystick-knob"></div>
     </div>
     <div class="touch-actions">
-      <button class="touch-key dash-button" type="button" data-key="space" aria-label="Dash forward">DASH</button>
+      <button id="touchDashButton" class="touch-key dash-button ready" type="button" data-key="space" aria-label="Dash forward">DASH</button>
       <button id="touchShoot" class="shoot-button" type="button" aria-label="Hold to charge, release to shoot">HOLD TO<br>CHARGE</button>
       <div class="touch-note">Hold, then release to shoot</div>
     </div>
@@ -454,6 +456,8 @@
   const timerEl = document.getElementById("timer");
   const chargeEl = document.getElementById("charge");
   const dashCooldownHud = document.getElementById("dashCooldownHud");
+  const touchDashButton = document.getElementById("touchDashButton");
+  const touchControls = document.getElementById("touchControls");
   const goalMessage = document.getElementById("goalMessage");
   const resetBtn = document.getElementById("reset");
   const menuOverlay = document.getElementById("menuOverlay");
@@ -2093,14 +2097,26 @@
     let entity = player;
     if (gameMode === "multiplayer" && localSide === "right") entity = cpu;
     const remaining = Math.max(0, Number(entity.__dashCooldown) || 0);
+    const onTouchLayout = getComputedStyle(touchControls).display !== "none";
+
+    // Desktop gets the key hint; mobile puts the countdown directly on the
+    // DASH button, where the player just pressed it.
     if (remaining <= 0.04) {
-      dashCooldownHud.textContent = "DASH READY · SPACE";
+      dashCooldownHud.textContent = onTouchLayout ? "DASH READY" : "DASH READY · SPACE";
       dashCooldownHud.classList.add("ready");
       dashCooldownHud.classList.remove("cooling");
+      touchDashButton.textContent = "DASH";
+      touchDashButton.classList.add("ready");
+      touchDashButton.classList.remove("cooling");
+      touchDashButton.setAttribute("aria-label", "Dash ready");
     } else {
       dashCooldownHud.textContent = `DASH · ${remaining.toFixed(1)}s`;
       dashCooldownHud.classList.add("cooling");
       dashCooldownHud.classList.remove("ready");
+      touchDashButton.textContent = `${remaining.toFixed(1)}s`;
+      touchDashButton.classList.add("cooling");
+      touchDashButton.classList.remove("ready");
+      touchDashButton.setAttribute("aria-label", `Dash ready in ${Math.ceil(remaining)} seconds`);
     }
   }
 
@@ -2286,6 +2302,7 @@
     debugLastMessage = `keydown ${key}`;
 
     if (e.code === "Space") keys.space = true;
+    // Space only controls dash. Charging is handled by left mouse button.
     if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
   });
 
