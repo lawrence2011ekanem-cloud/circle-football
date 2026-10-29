@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Circle Football — Network Debug v6</title>
+<title>Circle Football — Matchmaking Server Test</title>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -716,6 +716,9 @@
   let matchmakingSessionActive = false;
   let matchmakingPollTimer = null;
   let matchmakingPollBusy = false;
+  // Set this to the deployed WebSocket URL for server.js (for example wss://your-app.onrender.com).
+  const MATCHMAKING_SERVER_URL = "wss://YOUR-MATCHMAKING-SERVER.onrender.com";
+  let matchmakingSocket = null;
 
   function clearPeerSetupTimer() {
     if (peerSetupTimer !== null) { clearTimeout(peerSetupTimer); peerSetupTimer = null; }
@@ -973,6 +976,7 @@
     stopOpponentSearchPolling();
     matchmakingSearchActive = false;
     matchmakingSessionActive = false;
+    if (matchmakingSocket) { try { matchmakingSocket.close(); } catch (_) {} matchmakingSocket = null; }
     clearPeerSetupTimer();
     clearConnectionSetupTimer();
     debugConnectionStage = "idle";
@@ -1360,110 +1364,80 @@
       setOpponentSearchUI("The multiplayer library did not load. Refresh and try again.", false);
       return;
     }
-
-    // Matchmaking peers use a recognizable prefix so the discovery scan can
-    // ignore ordinary room-code peers. This requires PeerServer peer listing.
-    const searchId = "CFM" + randomRoomCode();
-    matchmakingSearchActive = true;
-    matchmakingSessionActive = true;
-    try {
-      peer = new Peer(searchId, { debug: 1 });
-    } catch (err) {
-      failOpponentSearch("Could not start opponent search: " + (err.message || "connection error"));
+    if (MATCHMAKING_SERVER_URL.includes("YOUR-MATCHMAKING-SERVER")) {
+      setOpponentSearchUI("Matchmaking server isn't configured yet. Deploy the included server, then put its wss:// address in MATCHMAKING_SERVER_URL.", false);
       return;
     }
-    const thisPeer = peer;
 
+    matchmakingSearchActive = true;
+    matchmakingSessionActive = true;
+    try { peer = new Peer(undefined, { debug: 0 }); }
+    catch (err) { failOpponentSearch("Could not start multiplayer: " + (err.message || "connection error")); return; }
+    const thisPeer = peer;
     peerSetupTimer = setTimeout(() => {
-      if (peer === thisPeer && matchmakingSearchActive && !thisPeer.id) {
-        failOpponentSearch("Timed out connecting to matchmaking. Please try again.", thisPeer);
-      }
+      if (peer === thisPeer && matchmakingSearchActive && !thisPeer.id) failOpponentSearch("Timed out connecting to PeerJS. Please try again.", thisPeer);
     }, 15000);
 
-    thisPeer.on("open", () => {
+    thisPeer.on("open", peerId => {
       if (peer !== thisPeer || !matchmakingSearchActive) return;
       clearPeerSetupTimer();
-      setOpponentSearchUI("Searching for an opponent… Keep this screen open. If discovery is not enabled on the server, the search will explain that.", true);
-
-      const scanForPeers = () => {
-        if (peer !== thisPeer || !matchmakingSearchActive || matchmakingPollBusy || thisPeer.destroyed) return;
-        if (typeof thisPeer.listAllPeers !== "function") {
-          failOpponentSearch("Automatic search is unavailable on this PeerJS server. Use Create Room / Join Room for now.", thisPeer);
-          return;
+      let socket;
+      try { socket = new WebSocket(MATCHMAKING_SERVER_URL); }
+      catch (err) { failOpponentSearch("Could not open matchmaking connection: " + (err.message || "invalid server URL"), thisPeer); return; }
+      matchmakingSocket = socket;
+      socket.addEventListener("open", () => {
+        if (matchmakingSocket !== socket || !matchmakingSearchActive) return;
+        socket.send(JSON.stringify({ type: "queue", peerId }));
+        setOpponentSearchUI("Searching for an opponent… Keep this screen open.", true);
+      });
+      socket.addEventListener("message", event => {
+        if (matchmakingSocket !== socket || peer !== thisPeer) return;
+        let msg;
+        try { msg = JSON.parse(event.data); } catch (_) { return; }
+        if (msg.type === "waiting") {
+          setOpponentSearchUI("Searching for an opponent… You’ll be connected automatically when someone else joins.", true);
+        } else if (msg.type === "matched" && typeof msg.peerId === "string" && (msg.role === "host" || msg.role === "guest")) {
+          matchmakingSearchActive = false;
+          matchmakingSessionActive = true;
+          setOpponentSearchUI("Opponent found! Connecting…", true);
+          networkStatus("matchmaking server paired players; opening direct PeerJS connection");
+          try {
+            if (msg.role === "guest") setupConnection(thisPeer.connect(msg.peerId, { reliable: true }), "guest");
+            // The host waits for the incoming PeerJS connection below.
+          } catch (err) {
+            failOpponentSearch("Could not connect to opponent: " + (err.message || "connection error"), thisPeer);
+          }
+          if (socket.readyState === WebSocket.OPEN) socket.close();
+          if (matchmakingSocket === socket) matchmakingSocket = null;
+        } else if (msg.type === "error") {
+          failOpponentSearch(msg.message || "The matchmaking server rejected the search.", thisPeer);
         }
-        matchmakingPollBusy = true;
-        try {
-          thisPeer.listAllPeers(peers => {
-            matchmakingPollBusy = false;
-            if (peer !== thisPeer || !matchmakingSearchActive) return;
-            const candidates = (Array.isArray(peers) ? peers : [])
-              .filter(id => typeof id === "string" && id.startsWith("CFM") && id !== thisPeer.id)
-              .sort();
-
-            // To avoid both browsers initiating the same match, the lower peer
-            // ID starts the direct connection; the other waits for that request.
-            const candidate = candidates.find(id => thisPeer.id < id);
-            if (!candidate) {
-              if (candidates.length) {
-                setOpponentSearchUI("Another searcher is checking in. Pairing automatically when the connection is ready…", true);
-              }
-              return;
-            }
-
-            stopOpponentSearchPolling();
-            matchmakingSearchActive = false;
-            matchmakingSessionActive = true;
-            setOpponentSearchUI("Opponent found! Connecting…", true);
-            networkStatus("matchmaking: opponent discovered; initiating connection");
-            try {
-              const conn = thisPeer.connect(candidate, { reliable: true });
-              setupConnection(conn, "guest");
-            } catch (err) {
-              failOpponentSearch("Could not connect to that opponent: " + (err.message || "connection error"), thisPeer);
-            }
-          });
-        } catch (err) {
-          matchmakingPollBusy = false;
-          failOpponentSearch("Opponent search could not list other players on this server. Create Room / Join Room still work. Details: " + (err.message || "discovery unavailable"), thisPeer);
-        }
-      };
-
-      scanForPeers();
-      matchmakingPollTimer = setInterval(scanForPeers, 2200);
+      });
+      socket.addEventListener("error", () => {
+        if (peer === thisPeer && matchmakingSearchActive) failOpponentSearch("Could not reach the matchmaking server. Check its URL and try again.", thisPeer);
+      });
+      socket.addEventListener("close", () => {
+        if (matchmakingSocket === socket) matchmakingSocket = null;
+      });
     });
 
     thisPeer.on("connection", conn => {
-      // When a matching peer connects to us, become the authoritative host.
       if (peer !== thisPeer || (!matchmakingSearchActive && !matchmakingSessionActive) || connection) {
         try { conn.close(); } catch (_) {}
         return;
       }
-      stopOpponentSearchPolling();
       matchmakingSearchActive = false;
       matchmakingSessionActive = true;
       setOpponentSearchUI("Opponent found! Establishing the match…", true);
-      networkStatus("matchmaking: incoming opponent connection received");
       setupConnection(conn, "host");
     });
-
     thisPeer.on("error", err => {
       if (peer !== thisPeer) return;
-      clearPeerSetupTimer();
       const detail = peerErrorText(err);
-      if (matchmakingSearchActive) {
-        failOpponentSearch("Automatic opponent search could not use peer discovery on the current PeerJS server. PeerJS Cloud requires peer listing to be enabled; Create Room / Join Room still work. (" + detail + ")", thisPeer);
-      } else if (matchmakingSessionActive) {
-        stopOpponentSearchPolling();
-        matchmakingSearchActive = false;
-        matchmakingSessionActive = false;
-        setOpponentSearchUI("Matchmaking connection error: " + detail + ". You can search again.", false);
-      }
+      if (matchmakingSearchActive || matchmakingSessionActive) failOpponentSearch("PeerJS connection error: " + detail + ". You can search again.", thisPeer);
     });
-
     thisPeer.on("disconnected", () => {
-      if (peer === thisPeer && matchmakingSearchActive) {
-        failOpponentSearch("Lost the matchmaking service connection. Please try searching again.", thisPeer);
-      }
+      if (peer === thisPeer && (matchmakingSearchActive || matchmakingSessionActive)) failOpponentSearch("Lost the PeerJS connection. Please try searching again.", thisPeer);
     });
   }
 
