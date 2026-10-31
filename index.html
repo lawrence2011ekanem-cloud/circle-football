@@ -834,7 +834,8 @@
   const ball = {
     x: W / 2, y: H / 2, r: 13,
     vx: 0, vy: 0,
-    z: 0, vz: 0
+    z: 0, vz: 0,
+    __lobNoScore: false
   };
 
   let youScore = 0;
@@ -1851,6 +1852,7 @@
     ball.vx = 0;
     ball.vy = 0;
     ball.z = 0; ball.vz = 0;
+    ball.__lobNoScore = false;
     player.charge = 0;
     cpu.charge = 0;
     charge = 0;
@@ -1952,6 +1954,7 @@
     ball.vx = 0;
     ball.vy = 0;
     ball.z = 0; ball.vz = 0;
+    ball.__lobNoScore = false;
     player.charge = 0;
     cpu.charge = 0;
     charge = 0;
@@ -2007,6 +2010,7 @@
     ball.vy = dy * (lob ? power * 0.78 : power);
     ball.x = entity.x + dx * (entity.r + ball.r + 2);
     ball.y = entity.y + dy * (entity.r + ball.r + 2);
+    ball.__lobNoScore = !!lob;
     if (lob) {
       ball.z = 1; ball.vz = 5.8 + amount * 3.0;
       entity.__lobCooldown = 5.0;
@@ -2062,6 +2066,9 @@
   }
 
   function resolveBallPlayerCollision(circle) {
+    // A ball in the air is untouchable. Keep this guard here as well as in
+    // physics so dash substeps and any future collision callers obey the rule.
+    if (ball.z > 0.5) return false;
     let dx = ball.x - circle.x;
     let dy = ball.y - circle.y;
     let len = Math.hypot(dx, dy);
@@ -2446,6 +2453,12 @@
     }
 
     const airborne = ball.z > 0.5;
+    // A lob cannot score. The no-score state ends only when a player receives
+    // the ball on the ground, allowing the next ordinary shot to score.
+    if (!airborne && ball.__lobNoScore &&
+        (touching(player, ball) || touching(cpu, ball) || (aiCount === 2 && touching(defender, ball)))) {
+      ball.__lobNoScore = false;
+    }
     const inMouth = inGoalMouth(ball.y);
     const bounce = 0.82;
 
@@ -2461,12 +2474,12 @@
 
     // The goal opening is the ONLY place where the ball may cross the
     // field's vertical boundary. Everywhere else the line is a solid wall.
-    if (ball.x - ball.r < field.left && !inMouth) {
+    if (ball.x - ball.r < field.left && (!inMouth || ball.__lobNoScore)) {
       ball.x = field.left + ball.r;
       ball.vx = Math.abs(ball.vx) * bounce;
       if (Math.abs(ball.vy) < 1.0) ball.vy = ball.vy >= 0 ? 1.0 : -1.0;
     }
-    if (ball.x + ball.r > field.right && !inMouth) {
+    if (ball.x + ball.r > field.right && (!inMouth || ball.__lobNoScore)) {
       ball.x = field.right - ball.r;
       ball.vx = -Math.abs(ball.vx) * bounce;
       if (Math.abs(ball.vy) < 1.0) ball.vy = ball.vy >= 0 ? 1.0 : -1.0;
@@ -2474,11 +2487,11 @@
 
     // Inside the actual goal mouth, the ball is allowed to cross the
     // vertical goal line. Reaching the back of the net scores immediately.
-    if (!airborne && inMouth && ball.x - ball.r < field.left - field.goalDepth) {
+    if (!airborne && !ball.__lobNoScore && inMouth && ball.x - ball.r < field.left - field.goalDepth) {
       scoreGoal("left");
       return;
     }
-    if (!airborne && inMouth && ball.x + ball.r > field.right + field.goalDepth) {
+    if (!airborne && !ball.__lobNoScore && inMouth && ball.x + ball.r > field.right + field.goalDepth) {
       scoreGoal("right");
       return;
     }
@@ -2486,7 +2499,7 @@
     // If the ball is inside a goal mouth, it may travel toward the goal,
     // but it can never pass beyond the physical back of the net without
     // scoring. Keep it inside the legal goal depth until scoreGoal runs.
-    if (!airborne && inGoalMouth(ball.y)) {
+    if (!airborne && !ball.__lobNoScore && inGoalMouth(ball.y)) {
       if (ball.x < field.left - field.goalDepth) {
         ball.x = field.left - field.goalDepth;
         if (ball.vx < 0) ball.vx = Math.abs(ball.vx) * 0.5;
