@@ -317,17 +317,10 @@
   .mp-small { font-size: 12px; color:#94a3b8; margin-top:12px; }
 
 
-#netDebugPanel{position:fixed;left:8px;bottom:8px;z-index:99999;background:rgba(5,12,24,.94);color:#d9f3ff;border:1px solid #48a9d6;border-radius:8px;padding:8px 10px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;max-width:min(520px,calc(100vw - 16px));white-space:pre-wrap;pointer-events:none;max-height:45vh;overflow:hidden;box-shadow:0 3px 14px #0008}
 
 
   /* Mobile/web publishing support */
   canvas { touch-action: none; }
-  #netDebugPanel { display: none; }
-  #debugToggle {
-    position: fixed; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right));
-    z-index: 100000; padding: 7px 10px; font-size: 12px; opacity: .82;
-  }
-  #netDebugPanel.debug-visible { display: block; }
   #touchControls {
     display: none;
     align-items: center;
@@ -400,7 +393,6 @@
     .modeChoice { min-width: min(180px, 39vw); padding:12px 14px; font-size:17px; }
     .mp-card { max-height:85dvh; overflow-y:auto; padding:20px 16px; }
     .mp-card h3 { font-size:26px; }
-    #netDebugPanel { max-width:calc(100vw - 16px); max-height:48dvh; overflow:auto; font-size:10px; line-height:1.35; }
   }
   @media (orientation: landscape) and (max-height: 520px) and (pointer: coarse) {
     body { padding: 4px 8px; }
@@ -451,8 +443,6 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
-<div id="netDebugPanel">MP DEBUG v6: waiting for game…</div>
-<button id="debugToggle" type="button" aria-expanded="false">Show debug</button>
 
 <div id="cfAccount">
   <button id="cfAccountToggle" type="button" aria-expanded="false" aria-controls="cfAccountPanel">
@@ -748,8 +738,6 @@
   "use strict";
 
   const canvas = document.getElementById("game");
-  const debugToggle = document.getElementById("debugToggle");
-  const netDebugPanel = document.getElementById("netDebugPanel");
   const touchShoot = document.getElementById("touchShoot");
   const ctx = canvas.getContext("2d");
   const scoreEl = document.getElementById("score");
@@ -916,7 +904,6 @@
   function networkStatus(message) {
     debugConnectionStage = message;
     debugLastMessage = message;
-    updateNetworkDebug();
   }
   function peerErrorText(err) {
     if (!err) return "unknown PeerJS error";
@@ -939,51 +926,6 @@
   let networkInputTimer = 0;
   const NETWORK_RATE = 1 / 30;
   const ROOM_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
-  function updateNetworkDebug() {
-    const el = document.getElementById("netDebugPanel");
-    if (!el) return;
-    const keyList = ["w","a","s","d","arrowup","arrowdown","arrowleft","arrowright"];
-    const localKeys = keyList.filter(k => keys[k]).join(",") || "none";
-    const remoteKeys = keyList.filter(k => remoteInput[k]).join(",") || "none";
-    const age = t => t ? (Math.max(0, (Date.now()-t)/1000)).toFixed(1)+"s ago" : "never";
-    const fmt = n => Number(n || 0).toFixed(0);
-    const leftEntity = player;
-    const rightEntity = cpu;
-    const connectionState = !connection ? "no connection" : (connection.open ? "open" : "connecting/closed");
-    const expectedDirection = multiplayerRole === "guest"
-      ? "INPUT: this guest -> host (received=0 here is normal)"
-      : multiplayerRole === "host"
-        ? "INPUT: guest -> this host (received must rise when guest presses keys)"
-        : "INPUT direction: waiting for role";
-    const snapshotDirection = multiplayerRole === "host"
-      ? "SNAPSHOT: this host -> guest"
-      : multiplayerRole === "guest"
-        ? "SNAPSHOT: host -> this guest (received must rise while host tab is running)"
-        : "SNAPSHOT direction: waiting for role";
-    el.textContent =
-      `MP DEBUG v6 | mode=${gameMode} tab=${document.visibilityState}\n` +
-      `role=${multiplayerRole || "none"} local=${localSide || "?"} remote=${remoteSide || "?"} ready=${networkReady} conn=${connectionState}\n` +
-      `stage=${debugConnectionStage}\n` +
-      `peer id=${peer?.id || "pending/none"} signaling=${peer ? (peer.disconnected ? "disconnected" : "connected/not-disconnected") : "no peer"}\n` +
-      `data peer=${connection?.peer || "none"} ICE=${connection?.peerConnection?.iceConnectionState || "n/a"} PC=${connection?.peerConnection?.connectionState || "n/a"}\n` +
-      `peer error=${debugPeerError}\n` +
-      `gameStarted=${gameStarted} countdown=${countdownTimer.toFixed(2)} reset=${resetTimer.toFixed(2)}\n` +
-      `${expectedDirection}\n` +
-      `INPUT sent=${debugInputsSent} host-accepted=${multiplayerRole === "host" ? debugInputsReceived : "see host tab"} rejected=${debugInputsRejected}\n` +
-      `last input: ${debugLastInput} (${age(debugLastInputAt)})\n` +
-      `local keys=${localKeys} | remote keys=${remoteKeys}\n` +
-      `move Δ/frame: local=${debugLocalMove} remote=${debugRemoteMove}\n` +
-      `GREEN x=${fmt(leftEntity.x)} y=${fmt(leftEntity.y)} | RED x=${fmt(rightEntity.x)} y=${fmt(rightEntity.y)}\n` +
-      `${snapshotDirection}\n` +
-      `snapshots sent=${debugSnapshotsSent} (last ${age(debugLastSnapshotSentAt)})\n` +
-      `snapshots received=${debugSnapshotsReceived} (last ${age(debugLastSnapshotAt)}) seq=${debugSnapshotSeq}\n` +
-      `host ack input seq=${multiplayerRole === "guest" ? debugHostAckSeq : "n/a"} host remote keys=${debugHostRemoteKeys}\n` +
-      `last shoot=${debugLastShoot}\n` +
-      `last rejected=${debugLastRejected}\n` +
-      `visibility changes=${debugVisibilityChanges} last=${debugLastVisibility}\n` +
-      `last network event=${debugLastMessage}`;
-  }
 
   function randomRoomCode() {
     let code = "";
@@ -2053,7 +1995,7 @@
   }
 
   function performShot(entity, amount, lob = false) {
-    const kickRange = entity.r + ball.r + (gameMode === "multiplayer" ? 30 : 0);
+    const kickRange = entity.r + ball.r + 8 + (gameMode === "multiplayer" ? 30 : 0);
     if (ball.z > 0.5 || distance(entity.x, entity.y, ball.x, ball.y) > kickRange) return false;
     if (lob && (entity.__lobCooldown || 0) > 0) return false;
     let dx = ball.x - entity.x, dy = ball.y - entity.y;
@@ -2099,13 +2041,11 @@
       return;
     }
 
-    if (!touching(player, ball)) {
-      charge = 0;
-      chargeEl.style.width = "0%";
-      return;
-    }
+    // Use the same kick-range check as charging. The previous extra touching()
+    // gate was stricter than the charge range and could silently reject a shot.
     performShot(player, charge, lob);
     charge = 0;
+    if (lob) lobCharge = 0;
     chargeEl.style.width = "0%";
   }
 
@@ -2888,11 +2828,14 @@
 
     const playerKickRange = player.r + ball.r + 8;
     const playerNearBall = distance(player.x, player.y, ball.x, ball.y) <= playerKickRange;
-    if (charging && playerNearBall) {
+    const playerCharging = charging || lobCharging;
+    if (playerCharging && playerNearBall) {
       charge = clamp(charge + CHARGE_RATE * dt, 0, MAX_CHARGE);
+      if (lobCharging) lobCharge = charge;
       chargeEl.style.width = `${charge * 100}%`;
-    } else if (charging && !playerNearBall) {
+    } else if (playerCharging && !playerNearBall) {
       charge = 0;
+      if (lobCharging) lobCharge = 0;
       chargeEl.style.width = "0%";
     }
 
@@ -2916,7 +2859,6 @@
         gameMode === "multiplayer" && multiplayerRole === "host" && connection && networkReady) {
       sendHostSnapshot();
     }
-    updateNetworkDebug();
   });
 
   window.addEventListener("beforeunload", () => {
@@ -2931,7 +2873,6 @@
     const dt = Math.min(wallDt, 0.033);
     lastTime = now;
     update(dt);
-    updateNetworkDebug();
     requestAnimationFrame(loop);
   }
 
@@ -2983,13 +2924,6 @@
     if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
   });
 
-
-  // Show diagnostics only when requested, so they do not cover the pitch on phones.
-  debugToggle.addEventListener("click", () => {
-    const shown = netDebugPanel.classList.toggle("debug-visible");
-    debugToggle.textContent = shown ? "Hide debug" : "Show debug";
-    debugToggle.setAttribute("aria-expanded", String(shown));
-  });
 
   // Touch controls write into the same key state as the keyboard. The guest still
   // sends inputs to the host; it never simulates authoritative movement itself.
