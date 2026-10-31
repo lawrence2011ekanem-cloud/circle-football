@@ -483,8 +483,8 @@
         <h3>🎮 Controls</h3>
         <p><strong>Move:</strong> WASD / arrow keys, or mobile joystick</p>
         <p><strong>Dash:</strong> Space / mobile DASH button (5-second cooldown)</p>
-        <p><strong>Normal shot:</strong> Hold and release left-click / HOLD TO CHARGE</p>
-        <p><strong>Lob pass:</strong> Hold and release right-click / HOLD TO LOB (5-second cooldown)</p>
+        <p><strong>Normal shot:</strong> Hold and release left-click / F, or HOLD TO CHARGE</p>
+        <p><strong>Lob pass:</strong> Hold and release right-click / G, or HOLD TO LOB (5-second cooldown)</p>
         <p>Charging slows your movement. Airborne balls cannot be touched or score until they land.</p>
       </div>
     </div>
@@ -1995,7 +1995,7 @@
   }
 
   function performShot(entity, amount, lob = false) {
-    const kickRange = entity.r + ball.r + 8 + (gameMode === "multiplayer" ? 30 : 0);
+    const kickRange = entity.r + ball.r + 28 + (gameMode === "multiplayer" ? 30 : 0);
     if (ball.z > 0.5 || distance(entity.x, entity.y, ball.x, ball.y) > kickRange) return false;
     if (lob && (entity.__lobCooldown || 0) > 0) return false;
     let dx = ball.x - entity.x, dy = ball.y - entity.y;
@@ -2826,7 +2826,7 @@
     moveCPU(dt);
     if (aiCount === 2) moveDefender(dt);
 
-    const playerKickRange = player.r + ball.r + 8;
+    const playerKickRange = player.r + ball.r + 28;
     const playerNearBall = distance(player.x, player.y, ball.x, ball.y) <= playerKickRange;
     const playerCharging = charging || lobCharging;
     if (playerCharging && playerNearBall) {
@@ -2886,7 +2886,11 @@
     debugLastMessage = `keydown ${key}`;
 
     if (e.code === "Space") keys.space = true;
-    // Space only controls dash. Charging is handled by left mouse button.
+    if ((key === "f" || key === "g") && !e.repeat) {
+      e.preventDefault();
+      if (key === "f") charging = true;
+      else if (localLobCooldown <= 0.04) { lobCharging = true; lobCharge = 0; }
+    }
     if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
   });
 
@@ -2895,31 +2899,47 @@
     const key = e.key.toLowerCase();
     keys[key] = false;
     if (e.code === "Space") keys.space = false;
+    if (key === "f" && charging) { shoot(false); charging = false; }
+    if (key === "g" && lobCharging) { shoot(true); lobCharging = false; lobCharge = 0; }
     debugLastMessage = `keyup ${key}`;
     if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
   });
 
   canvas.addEventListener("contextmenu", e => e.preventDefault());
-  canvas.addEventListener("mousedown", (e) => {
+  let canvasChargePointer = null;
+  let canvasChargeButton = null;
+  canvas.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "touch") return; // touch devices use the dedicated action buttons
+    if (e.button !== 0 && e.button !== 2) return;
+    e.preventDefault();
     canvas.focus();
-    if (e.button === 0) {
-      e.preventDefault(); charging = true;
-    } else if (e.button === 2) {
-      e.preventDefault(); lobCharging = true; lobCharge = 0;
-    } else return;
+    if (canvasChargePointer !== null) return;
+    canvasChargePointer = e.pointerId;
+    canvasChargeButton = e.button;
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+    if (e.button === 0) charging = true;
+    else if (localLobCooldown <= 0.04) { lobCharging = true; lobCharge = 0; }
     if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
   });
-  window.addEventListener("mouseup", (e) => {
-    if (e.button === 0 && charging) { shoot(false); charging = false; }
-    if (e.button === 2 && lobCharging) { shoot(true); lobCharging = false; lobCharge = 0; }
+  function releaseCanvasCharge(e) {
+    if (canvasChargePointer === null) return;
+    if (e && e.pointerId !== undefined && e.pointerId !== canvasChargePointer) return;
+    const button = canvasChargeButton;
+    canvasChargePointer = null;
+    canvasChargeButton = null;
+    if (button === 0 && charging) { shoot(false); charging = false; }
+    if (button === 2 && lobCharging) { shoot(true); lobCharging = false; lobCharge = 0; }
     if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
-  });
+  }
+  window.addEventListener("pointerup", releaseCanvasCharge);
+  window.addEventListener("pointercancel", releaseCanvasCharge);
   window.addEventListener("blur", () => {
     for (const key of Object.keys(keys)) keys[key] = false;
     document.querySelectorAll(".touch-key.pressed").forEach(button => button.classList.remove("pressed"));
     document.querySelectorAll(".touch-key[data-pointer-id]").forEach(button => delete button.dataset.pointerId);
     touchShoot.classList.remove("pressed");
     shootPointerId = null;
+    canvasChargePointer = null; canvasChargeButton = null;
     charging = false; lobCharging = false; lobCharge = 0;
     if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
   });
