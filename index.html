@@ -1815,7 +1815,7 @@
   const MAX_SHOT = 12.5;
   const BALL_FRICTION = 0.985;
   const BALL_MAX_SPEED = 13;
-  const CPU_CHARGE_RATE = 1.5;
+  const CPU_CHARGE_RATE = 2.0;
   const CPU_MIN_SHOT = 5.5;
   const CPU_MAX_SHOT = 10.5;
   const CPU_SHOT_COOLDOWN = 0.7;
@@ -2177,7 +2177,7 @@
     // position on the RIGHT side of the ball before it can shoot.
     const goalX = field.left;
     const goalY = H / 2;
-    const contactDistance = cpu.r + ball.r + 3;
+    const contactDistance = cpu.r + ball.r + 9;
     const mouth = inGoalMouth(ball.y);
 
     let gx = goalX - ball.x;
@@ -2251,15 +2251,17 @@
 
     // Only shoot when we are actually touching the ball from a useful angle.
     // This keeps the AI from rubbing against the ball while waiting.
-    const touchingNow = distBall <= contactDistance + 4;
-    const properlyPositioned =
-      (idealReachable || nearLeftGoal) && touchingNow && alignment > 0.72;
+    const touchingNow = distBall <= contactDistance + 9;
+    // Be decisive: the CPU no longer needs a near-perfect approach angle.
+    // A moderately goal-facing contact is enough to attempt a shot, including
+    // when the ideal standing point is unavailable near a boundary.
+    const properlyPositioned = touchingNow && alignment > 0.42;
 
     if (properlyPositioned && cpu.shotCooldown <= 0) {
       cpu.charging = true;
       cpu.charge = clamp(cpu.charge + CPU_CHARGE_RATE * dt, 0, 1);
 
-      if (cpu.charge >= 0.55) {
+      if (cpu.charge >= 0.38) {
         // The shot direction is ONLY the actual CPU -> ball direction.
         const power = CPU_MIN_SHOT + (CPU_MAX_SHOT - CPU_MIN_SHOT) * cpu.charge;
         ball.vx = contactX * power;
