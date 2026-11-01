@@ -2173,6 +2173,38 @@
   function moveCPU(dt) {
     cpu.shotCooldown = Math.max(0, cpu.shotCooldown - dt);
 
+    // Emergency own-goal clearance (single-AI mode): if the ball has crossed
+    // into the CPU's goal mouth, do NOT chase it deeper toward the back net.
+    // Turn around and get behind it from the goal side so player-ball contact
+    // pushes it back out toward the field. If there is not enough room directly
+    // behind the ball, approach slightly above/below it to create a clearing angle.
+    if (aiCount === 1 && inGoalMouth(ball.y) && ball.x + ball.r > field.right) {
+      cpu.charging = false;
+      cpu.charge = 0;
+      const goalBackX = field.right + field.goalDepth;
+      const behindX = Math.min(goalBackX - cpu.r - 2, ball.x + cpu.r + ball.r + 5);
+      let clearY = ball.y;
+      if (behindX - ball.x < cpu.r + ball.r + 2) {
+        const side = ball.y < H / 2 ? 1 : -1;
+        clearY = clamp(ball.y + side * (cpu.r + ball.r + 8),
+          field.top + cpu.r, field.bottom - cpu.r);
+      }
+      const targetX = Math.max(field.right + cpu.r + 2, behindX);
+      const targetY = clearY;
+      let dx = targetX - cpu.x;
+      let dy = targetY - cpu.y;
+      const len = Math.hypot(dx, dy);
+      if (len > 0.5) {
+        dx /= len;
+        dy /= len;
+        const step = Math.min(cpu.speed * 1.15 * dt * 60, len);
+        cpu.x += dx * step;
+        cpu.y += dy * step;
+      }
+      clampPlayerToField(cpu);
+      return;
+    }
+
     // In single-AI mode, do not blindly chase an airborne kickoff lob toward
     // the CPU's own (right-side) goal. Track the likely landing point while
     // staying between the ball and the goal. This prevents the easy own-goal
