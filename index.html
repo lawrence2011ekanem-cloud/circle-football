@@ -2173,6 +2173,37 @@
   function moveCPU(dt) {
     cpu.shotCooldown = Math.max(0, cpu.shotCooldown - dt);
 
+    // In single-AI mode, do not blindly chase an airborne kickoff lob toward
+    // the CPU's own (right-side) goal. Track the likely landing point while
+    // staying between the ball and the goal. This prevents the easy own-goal
+    // exploit where the CPU runs underneath/behind a lob and carries it home.
+    if (aiCount === 1 && ball.z > 0.5) {
+      const discriminant = Math.sqrt(Math.max(0, ball.vz * ball.vz + 0.4 * ball.z));
+      const landingFrames = Math.max(0, (ball.vz + discriminant) / 0.2);
+      const flightSeconds = Math.min(0.9, landingFrames / 60);
+      const predictedX = ball.x + ball.vx * flightSeconds * 60;
+      const predictedY = ball.y + ball.vy * flightSeconds * 60;
+
+      // Only use this defensive interception when the lob is travelling
+      // beyond the CPU toward its own goal. Otherwise retain normal pursuit.
+      if (predictedX > cpu.x + 12) {
+        const interceptX = clamp(predictedX - (cpu.r + ball.r + 18),
+          field.left + cpu.r, field.right - cpu.r - 34);
+        const interceptY = clamp(predictedY, field.top + cpu.r, field.bottom - cpu.r);
+        let ix = interceptX - cpu.x;
+        let iy = interceptY - cpu.y;
+        const ilen = Math.hypot(ix, iy);
+        if (ilen > 1) {
+          ix /= ilen; iy /= ilen;
+          const step = Math.min(cpu.speed * dt * 60, ilen);
+          cpu.x += ix * step;
+          cpu.y += iy * step;
+        }
+        clampPlayerToField(cpu);
+        return;
+      }
+    }
+
     // The CPU attacks the LEFT goal. It must physically get to a reachable
     // position on the RIGHT side of the ball before it can shoot.
     const goalX = field.left;
@@ -2255,7 +2286,7 @@
     // Be decisive: the CPU no longer needs a near-perfect approach angle.
     // A moderately goal-facing contact is enough to attempt a shot, including
     // when the ideal standing point is unavailable near a boundary.
-    const properlyPositioned = touchingNow && alignment > 0.42;
+    const properlyPositioned = touchingNow && alignment > 0.30;
 
     if (properlyPositioned && cpu.shotCooldown <= 0) {
       cpu.charging = true;
