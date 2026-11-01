@@ -1860,6 +1860,8 @@
     chargeEl.style.width = "0%";
     cpu.charging = false;
     cpu.shotCooldown = 0;
+    // A fresh kickoff gives the single AI a short, decisive opening phase.
+    cpu.__kickoffHunt = 4.5;
     player.__mpCharging = false;
     cpu.__mpCharging = false;
   }
@@ -2173,31 +2175,81 @@
   function moveCPU(dt) {
     cpu.shotCooldown = Math.max(0, cpu.shotCooldown - dt);
 
-    // Emergency own-goal clearance (single-AI mode): if the ball has crossed
-    // into the CPU's goal mouth, do NOT chase it deeper toward the back net.
-    // Turn around and get behind it from the goal side so player-ball contact
-    // pushes it back out toward the field. If there is not enough room directly
-    // behind the ball, approach slightly above/below it to create a clearing angle.
-    if (aiCount === 1 && inGoalMouth(ball.y) && ball.x + ball.r > field.right) {
+    // Kickoff opening: attack the ball diagonally and shoot immediately on
+    // grounded contact. Keep this phase short so normal AI decision-making
+    // takes over once the opening play has developed.
+    if (aiCount === 1 && cpu.__kickoffHunt > 0) {
+      cpu.__kickoffHunt = Math.max(0, cpu.__kickoffHunt - dt);
+
+      // Predict a short landing point for kickoff lobs. The AI approaches from
+      // the goal-side (right) of the ball with a small vertical offset, rather
+      // than running straight underneath an airborne ball.
+      const flight = ball.z > 0.5
+        ? Math.min(0.75, Math.max(0, (ball.vz + Math.sqrt(Math.max(0, ball.vz * ball.vz + 0.4 * ball.z))) / 0.2) / 60)
+        : 0;
+      const chaseX = ball.x + ball.vx * flight * 60;
+      const chaseY = ball.y + ball.vy * flight * 60;
+      const contactGap = cpu.r + ball.r + 2;
+      const targetX = clamp(chaseX + contactGap, field.left + cpu.r, field.right - cpu.r - 2);
+      const angleOffset = chaseY < H / 2 ? 20 : -20;
+      const targetY = clamp(chaseY + angleOffset, field.top + cpu.r, field.bottom - cpu.r);
+
+      const dx = targetX - cpu.x;
+      const dy = targetY - cpu.y;
+      const len = Math.hypot(dx, dy);
+      if (len > 0.5) {
+        cpu.x += dx / len * Math.min(cpu.speed * 1.12 * dt * 60, len);
+        cpu.y += dy / len * Math.min(cpu.speed * 1.12 * dt * 60, len);
+      }
+      clampPlayerToField(cpu);
+
+      const distToBall = Math.hypot(ball.x - cpu.x, ball.y - cpu.y);
+      if (ball.z <= 0.5 && distToBall <= cpu.r + ball.r + 7) {
+        // No charge/alignment wait at kickoff: make contact a decisive shot.
+        let sx = field.left - ball.x;
+        let sy = H / 2 - ball.y;
+        const sl = Math.hypot(sx, sy) || 1;
+        sx /= sl; sy /= sl;
+        const shotPower = Math.max(CPU_MIN_SHOT, CPU_MAX_SHOT * 0.82);
+        ball.vx = sx * shotPower;
+        ball.vy = sy * shotPower;
+        ball.x = cpu.x + sx * (cpu.r + ball.r + 2);
+        ball.y = cpu.y + sy * (cpu.r + ball.r + 2);
+        cpu.charging = false;
+        cpu.charge = 0;
+        cpu.shotCooldown = CPU_SHOT_COOLDOWN;
+        cpu.__kickoffHunt = 0;
+      } else if (cpu.__kickoffHunt <= 0) {
+        cpu.charging = false;
+        cpu.charge = 0;
+      }
+      return;
+    }
+
+    // Emergency own-goal clearance (single-AI mode).
+    // Start defending BEFORE the ball crosses the goal line. When it is already
+    // in the goal mouth, move to the goal-side (right-hand side) of the ball so
+    // normal player collision pushes it back toward midfield.
+    const cpuGoalThreat = aiCount === 1 && inGoalMouth(ball.y) &&
+      (ball.x > field.right - 58 || (ball.vx > 0.35 && ball.x + ball.vx * 10 > field.right - 45));
+    if (cpuGoalThreat && ball.z <= 0.5) {
       cpu.charging = false;
       cpu.charge = 0;
-      const goalBackX = field.right + field.goalDepth;
-      const behindX = Math.min(goalBackX - cpu.r - 2, ball.x + cpu.r + ball.r + 5);
-      let clearY = ball.y;
-      if (behindX - ball.x < cpu.r + ball.r + 2) {
-        const side = ball.y < H / 2 ? 1 : -1;
-        clearY = clamp(ball.y + side * (cpu.r + ball.r + 8),
-          field.top + cpu.r, field.bottom - cpu.r);
-      }
-      const targetX = Math.max(field.right + cpu.r + 2, behindX);
-      const targetY = clearY;
+
+      // The CPU must stand to the RIGHT of the ball to push it LEFT.
+      // It may enter the goal mouth, but never pass the back of the net.
+      const goalBackLimit = field.right + field.goalDepth - cpu.r - 2;
+      const desiredX = ball.x + cpu.r + ball.r + 3;
+      const targetX = clamp(desiredX, field.right - cpu.r + 2, goalBackLimit);
+      const targetY = clamp(ball.y, field.top + cpu.r, field.bottom - cpu.r);
+
       let dx = targetX - cpu.x;
       let dy = targetY - cpu.y;
       const len = Math.hypot(dx, dy);
       if (len > 0.5) {
         dx /= len;
         dy /= len;
-        const step = Math.min(cpu.speed * 1.15 * dt * 60, len);
+        const step = Math.min(cpu.speed * 1.35 * dt * 60, len);
         cpu.x += dx * step;
         cpu.y += dy * step;
       }
@@ -2484,6 +2536,16 @@
 
     if (ball.z <= 0.5 && touching(cpu, ball) && !(gameMode === "multiplayer" ? cpu.__mpCharging : cpu.charging)) {
       pushBallFromCircle(cpu, 0.08);
+    }
+
+    // If the single CPU reaches a grounded ball in its own goal mouth,
+    // guarantee a clearance impulse toward midfield. This covers cases where
+    // the back wall leaves too little room for a perfect behind-the-ball run.
+    if (aiCount === 1 && ball.z <= 0.5 && inGoalMouth(ball.y) &&
+        ball.x > field.right - 8 &&
+        Math.hypot(cpu.x - ball.x, cpu.y - ball.y) < cpu.r + ball.r + 13) {
+      ball.vx = Math.min(ball.vx, -3.8);
+      ball.vy += clamp((H / 2 - ball.y) * 0.018, -1.1, 1.1);
     }
 
     if (ball.z <= 0.5 && aiCount === 2 && touching(defender, ball)) {
