@@ -2588,28 +2588,32 @@
     }
     const inMouth = inGoalMouth(ball.y);
     const bounce = 0.82;
+    // A tiny wall touch must still produce a real rebound. Without a minimum
+    // normal impulse, a nearly-zero velocity can leave the ball resting on a
+    // boundary (especially where two walls meet in a corner).
+    const MIN_WALL_REBOUND = 1.25;
+    const reboundSpeed = speed => Math.max(Math.abs(speed) * bounce, MIN_WALL_REBOUND);
 
-    // Top/bottom walls always bounce.
-    if (ball.y - ball.r < field.top) {
+    // Top/bottom walls always bounce, including very gentle contacts.
+    if (ball.y - ball.r <= field.top) {
       ball.y = field.top + ball.r;
-      ball.vy = Math.abs(ball.vy) * bounce;
+      ball.vy = reboundSpeed(ball.vy);
     }
-    if (ball.y + ball.r > field.bottom) {
+    if (ball.y + ball.r >= field.bottom) {
       ball.y = field.bottom - ball.r;
-      ball.vy = -Math.abs(ball.vy) * bounce;
+      ball.vy = -reboundSpeed(ball.vy);
     }
 
     // The goal opening is the ONLY place where the ball may cross the
     // field's vertical boundary. Everywhere else the line is a solid wall.
-    if (ball.x - ball.r < field.left && (!inMouth || ball.__lobNoScore)) {
+    // Goal-mouth behaviour is deliberately preserved for normal scoring.
+    if (ball.x - ball.r <= field.left && (!inMouth || ball.__lobNoScore)) {
       ball.x = field.left + ball.r;
-      ball.vx = Math.abs(ball.vx) * bounce;
-      if (Math.abs(ball.vy) < 1.0) ball.vy = ball.vy >= 0 ? 1.0 : -1.0;
+      ball.vx = reboundSpeed(ball.vx);
     }
-    if (ball.x + ball.r > field.right && (!inMouth || ball.__lobNoScore)) {
+    if (ball.x + ball.r >= field.right && (!inMouth || ball.__lobNoScore)) {
       ball.x = field.right - ball.r;
-      ball.vx = -Math.abs(ball.vx) * bounce;
-      if (Math.abs(ball.vy) < 1.0) ball.vy = ball.vy >= 0 ? 1.0 : -1.0;
+      ball.vx = -reboundSpeed(ball.vx);
     }
 
     // Inside the actual goal mouth, the ball is allowed to cross the
