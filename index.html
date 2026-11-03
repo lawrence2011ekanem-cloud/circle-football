@@ -934,10 +934,11 @@
     return code;
   }
 
-  // --- Lightweight party system (separate from the 1v1 match connection) ---
+  // --- Party membership (leader-authoritative; separate from the 1v1 match connection) ---
   let teamPeer = null;
   let teamLeader = false;
   let teamPartyCode = "";
+  let teamLeaderPeerId = "";
   let teamConnections = new Map();
   let teamRoster = [];
   let teamSelfName = "Player";
@@ -952,9 +953,11 @@
     if (!teamRoster.length) {
       const li = document.createElement("li"); li.textContent = "Not in a party"; teamRosterEl.appendChild(li);
     } else {
-      teamRoster.forEach((person, index) => {
+      teamRoster.forEach(person => {
         const li = document.createElement("li");
-        li.textContent = person.name + (index === 0 ? " · Leader" : "");
+        const isLeader = person.id === teamLeaderPeerId;
+        const isSelf = person.id === teamMemberId || (teamLeader && isLeader);
+        li.textContent = (person.name || "Player") + (isLeader ? " · Leader" : "") + (isSelf ? " · You" : "");
         teamRosterEl.appendChild(li);
       });
     }
@@ -963,18 +966,21 @@
     teamCodeInput.hidden = !!teamPartyCode;
     teamLeaveBtn.hidden = !teamPartyCode || teamLeader;
     teamDisbandBtn.hidden = !teamPartyCode || !teamLeader;
-    teamIntro.textContent = teamPartyCode ? (teamLeader ? "You are the party leader. Share this code with up to 3 players." : "You're in a party. Share the code with your friends.") : "Create a party and share its code. Up to 4 players can join.";
+    teamIntro.textContent = teamPartyCode ? (teamLeader ? "You are the party leader. Share this code with up to 3 players." : "You are connected to the party leader. The leader manages this party.") : "Create a party and share its code. Up to 4 players can join.";
   }
   function teamSendRoster() {
-    const packet = { type: "party-state", code: teamPartyCode, roster: teamRoster };
+    const packet = { type:"party-state", code:teamPartyCode, leaderPeerId:teamLeaderPeerId, roster:teamRoster };
     for (const conn of teamConnections.values()) { if (conn.open) conn.send(packet); }
   }
   function teamCleanup(message = "Not in a party yet.") {
-    if (teamClientConn) { try { teamClientConn.close(); } catch (_) {} }
+    const oldClient = teamClientConn;
     teamClientConn = null;
-    if (teamPeer) { try { teamPeer.destroy(); } catch (_) {} }
-    teamPeer = null; teamConnections = new Map(); teamRoster = [];
-    teamLeader = false; teamPartyCode = ""; teamMemberId = "";
+    if (oldClient) { try { oldClient.close(); } catch (_) {} }
+    const oldPeer = teamPeer;
+    teamPeer = null;
+    if (oldPeer) { try { oldPeer.destroy(); } catch (_) {} }
+    teamConnections = new Map(); teamRoster = [];
+    teamLeader = false; teamPartyCode = ""; teamLeaderPeerId = ""; teamMemberId = "";
     teamRender(); teamSetStatus(message);
   }
   function teamCreateParty() {
@@ -982,36 +988,44 @@
     if (typeof Peer === "undefined") { teamSetStatus("Party service did not load. Refresh and try again."); return; }
     teamPartyCode = randomRoomCode();
     teamLeader = true;
-    teamRoster = [{ id: "leader", name: "Player" }];
     teamRender(); teamSetStatus("Creating party code...");
-    try { teamPeer = new Peer(teamPartyCode, { debug: 0 }); }
+    try { teamPeer = new Peer(teamPartyCode, { debug:0 }); }
     catch (err) { teamCleanup("Could not create party: " + (err.message || "connection error")); return; }
     const thisPeer = teamPeer;
     thisPeer.on("open", id => {
       if (teamPeer !== thisPeer) return;
-      teamPartyCode = id; teamCodeEl.textContent = id;
-      teamSetStatus("Party ready. Waiting for players..."); teamRender();
+      teamPartyCode = id;
+      teamLeaderPeerId = id;
+      teamMemberId = id;
+      teamRoster = [{ id, name:teamSelfName, role:"leader" }];
+      teamRender(); teamSetStatus("Party ready. You are the leader; waiting for players...");
     });
     thisPeer.on("connection", conn => {
-      if (teamPeer !== thisPeer) { try { conn.close(); } catch (_) {} return; }
-      if (teamRoster.length >= 4) { conn.on("open", () => conn.send({ type:"party-error", message:"This party is full (4 players max)." })); setTimeout(() => { try { conn.close(); } catch (_) {} }, 1000); return; }
+      if (teamPeer !== thisPeer || !teamLeader) { try { conn.close(); } catch (_) {} return; }
       const id = conn.peer;
       conn.on("open", () => {
-        if (teamRoster.length >= 4) { conn.send({type:"party-error", message:"This party is full (4 players max)."}); conn.close(); return; }
-        teamConnections.set(id, conn);
-        teamRoster.push({ id, name:"Player" });
-        conn.send({ type:"party-state", code:teamPartyCode, roster:teamRoster });
-        teamSendRoster(); teamRender(); teamSetStatus("A player joined your party.");
+        if (teamPeer !== thisPeer) { try { conn.close(); } catch (_) {} return; }
+        // The leader only adds a member after receiving that member's join request.
       });
       conn.on("data", data => {
-        if (!data || typeof data !== "object") return;
-        if (data.type === "party-leave") {
-          teamConnections.delete(id); teamRoster = teamRoster.filter(p => p.id !== id);
+        if (!data || typeof data !== "object" || teamPeer !== thisPeer) return;
+        if (data.type === "party-join") {
+          if (teamConnections.has(id)) { conn.send({type:"party-state", code:teamPartyCode, leaderPeerId:teamLeaderPeerId, roster:teamRoster}); return; }
+          if (teamRoster.length >= 4) { conn.send({type:"party-error", message:"This party is full (4 players max)."}); setTimeout(() => { try { conn.close(); } catch (_) {} }, 250); return; }
+          teamConnections.set(id, conn);
+          teamRoster.push({ id, name:String(data.name || "Player").slice(0,24), role:"member" });
+          conn.send({type:"party-state", code:teamPartyCode, leaderPeerId:teamLeaderPeerId, roster:teamRoster});
+          teamSendRoster(); teamRender(); teamSetStatus("A player joined your party.");
+        } else if (data.type === "party-leave") {
+          teamConnections.delete(id); teamRoster = teamRoster.filter(person => person.id !== id);
           teamSendRoster(); teamRender(); teamSetStatus("A player left the party.");
         }
       });
       conn.on("close", () => {
-        if (teamConnections.has(id)) { teamConnections.delete(id); teamRoster = teamRoster.filter(p => p.id !== id); teamSendRoster(); teamRender(); }
+        if (teamConnections.has(id)) {
+          teamConnections.delete(id); teamRoster = teamRoster.filter(person => person.id !== id);
+          teamSendRoster(); teamRender(); teamSetStatus("A player disconnected from your party.");
+        }
       });
       conn.on("error", () => {});
     });
@@ -1022,22 +1036,38 @@
     if (code.length !== 6) { teamSetStatus("Enter the 6-character party code."); return; }
     teamCleanup();
     if (typeof Peer === "undefined") { teamSetStatus("Party service did not load. Refresh and try again."); return; }
-    teamSetStatus("Connecting to party...");
-    try { teamPeer = new Peer(undefined, { debug: 0 }); }
+    teamSetStatus("Connecting to party leader...");
+    try { teamPeer = new Peer(undefined, { debug:0 }); }
     catch (err) { teamSetStatus("Could not connect: " + (err.message || "connection error")); return; }
     const thisPeer = teamPeer;
     thisPeer.on("open", () => {
       if (teamPeer !== thisPeer) return;
+      teamMemberId = thisPeer.id;
       teamClientConn = thisPeer.connect(code, { reliable:true });
       const conn = teamClientConn;
-      conn.on("open", () => { if (teamClientConn !== conn) return; teamPartyCode = code; teamLeader = false; teamMemberId = thisPeer.id; conn.send({type:"party-join", name:"Player"}); teamSetStatus("Connected! Joining party..."); });
-      conn.on("data", data => {
-        if (!data || typeof data !== "object") return;
-        if (data.type === "party-state") { teamPartyCode = data.code || code; teamRoster = Array.isArray(data.roster) ? data.roster : []; teamRender(); teamSetStatus("You're in the party!"); }
-        if (data.type === "party-error") { teamSetStatus(data.message || "Could not join party."); teamCleanup(data.message || "Could not join party."); }
-        if (data.type === "party-disbanded") teamCleanup("The party was disbanded by its leader.");
+      conn.on("open", () => {
+        if (teamClientConn !== conn) return;
+        conn.send({type:"party-join", name:teamSelfName});
+        teamSetStatus("Connected to leader. Waiting for party confirmation...");
       });
-      conn.on("close", () => { if (teamClientConn === conn && teamPartyCode) teamCleanup("Connection to party ended."); });
+      conn.on("data", data => {
+        if (!data || typeof data !== "object" || teamClientConn !== conn) return;
+        if (data.type === "party-state") {
+          if (!data.leaderPeerId || !Array.isArray(data.roster) || !data.roster.some(person => person.id === teamMemberId) || !data.roster.some(person => person.id === data.leaderPeerId)) {
+            teamSetStatus("Received an invalid party roster. Rejoin the party."); return;
+          }
+          teamPartyCode = data.code || code;
+          teamLeader = false;
+          teamLeaderPeerId = data.leaderPeerId;
+          teamRoster = data.roster;
+          teamRender(); teamSetStatus("You're in the party and connected to its leader!");
+        } else if (data.type === "party-error") {
+          teamCleanup(data.message || "Could not join party.");
+        } else if (data.type === "party-disbanded") {
+          teamCleanup("The party was disbanded by its leader.");
+        }
+      });
+      conn.on("close", () => { if (teamClientConn === conn && teamPartyCode) teamCleanup("Connection to party leader ended."); });
       conn.on("error", err => teamSetStatus("Party connection error: " + (err.message || "try again")));
     });
     thisPeer.on("error", err => { if (teamPeer === thisPeer && !teamPartyCode) teamSetStatus("Couldn't join party: " + (err.message || err.type || "check the code")); });
@@ -1049,7 +1079,10 @@
   }
   function teamDisbandParty() {
     if (!teamLeader) return;
-    for (const conn of teamConnections.values()) { if (conn.open) { try { conn.send({type:"party-disbanded"}); } catch (_) {} } setTimeout(() => { try { conn.close(); } catch (_) {} }, 250); }
+    for (const conn of teamConnections.values()) {
+      if (conn.open) { try { conn.send({type:"party-disbanded"}); } catch (_) {} }
+      try { conn.close(); } catch (_) {}
+    }
     teamCleanup("Party disbanded.");
   }
   teamToggle.addEventListener("click", () => {
