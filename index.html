@@ -944,6 +944,9 @@
   let teamSelfName = "Player";
   let teamClientConn = null;
   let teamMemberId = "";
+  let teamLastLaunchId = "";
+  let teamLaunchRetryTimer = null;
+  let teamLaunchAcks = new Set();
 
   function teamSetStatus(message) { teamStatus.textContent = message; }
   function teamRender() {
@@ -973,6 +976,7 @@
     for (const conn of teamConnections.values()) { if (conn.open) conn.send(packet); }
   }
   function teamCleanup(message = "Not in a party yet.") {
+    if (teamLaunchRetryTimer) { clearInterval(teamLaunchRetryTimer); teamLaunchRetryTimer = null; }
     const oldClient = teamClientConn;
     teamClientConn = null;
     if (oldClient) { try { oldClient.close(); } catch (_) {} }
@@ -1063,11 +1067,24 @@
           teamRender(); teamSetStatus("You're in the party and connected to its leader!");
         } else if (data.type === "party-match-start") {
           // Only the confirmed party leader may launch the party's AI mode.
-          if (data.leaderPeerId !== teamLeaderPeerId) return;
+          if (data.leaderPeerId !== teamLeaderPeerId || !teamRoster.some(person => person.id === teamLeaderPeerId)) return;
           const selectedAI = Number(data.aiCount);
           if (selectedAI !== 1 && selectedAI !== 2) return;
-          teamSetStatus("Party leader started an AI match. Joining the same mode...");
-          startMatch(selectedAI);
+          const launchId = String(data.launchId || (data.leaderPeerId + ":" + data.startedAt));
+          if (teamLastLaunchId === launchId) {
+            try { if (conn.open) conn.send({type:"party-match-ack", launchId, memberId:teamMemberId, status:"already-started"}); } catch (_) {}
+            return;
+          }
+          teamLastLaunchId = launchId;
+          teamSetStatus("Party leader started the match. Starting your game...");
+          try {
+            startMatch(selectedAI);
+            teamSetStatus("Match started. You're in the game!");
+            if (conn.open) conn.send({type:"party-match-ack", launchId, memberId:teamMemberId, status:"started"});
+          } catch (err) {
+            teamSetStatus("Couldn't start the party match: " + (err && err.message ? err.message : "unknown game error"));
+            try { if (conn.open) conn.send({type:"party-match-ack", launchId, memberId:teamMemberId, status:"error", message:String(err && err.message || err)}); } catch (_) {}
+          }
         } else if (data.type === "party-disbanded") {
           teamCleanup("The party was disbanded by its leader.");
         }
@@ -1907,18 +1924,25 @@
   function startPartyAIMatch(selectedAI) {
     if (selectedAI !== 1 && selectedAI !== 2) return;
     if (!teamPartyCode || !teamLeader) return;
-    // Tell every confirmed party member to enter the same AI mode before the leader starts.
-    const packet = {
-      type: "party-match-start",
-      leaderPeerId: teamLeaderPeerId,
-      aiCount: selectedAI,
-      startedAt: Date.now()
-    };
-    for (const conn of teamConnections.values()) {
-      if (conn.open) {
-        try { conn.send(packet); } catch (_) {}
+    if (teamLaunchRetryTimer) { clearInterval(teamLaunchRetryTimer); teamLaunchRetryTimer = null; }
+    teamLaunchAcks = new Set();
+    const launchId = teamLeaderPeerId + ":" + Date.now() + ":" + Math.random().toString(36).slice(2,8);
+    const packet = { type:"party-match-start", leaderPeerId:teamLeaderPeerId, aiCount:selectedAI, startedAt:Date.now(), launchId };
+    let attempts = 0;
+    const sendLaunch = () => {
+      attempts++;
+      for (const [id, conn] of teamConnections.entries()) {
+        if (conn.open && !teamLaunchAcks.has(id + ":" + launchId)) {
+          try { conn.send(packet); } catch (_) {}
+        }
       }
-    }
+      if (attempts >= 8 || teamLaunchAcks.size >= teamConnections.size) {
+        clearInterval(teamLaunchRetryTimer); teamLaunchRetryTimer = null;
+      }
+    };
+    sendLaunch();
+    teamLaunchRetryTimer = setInterval(sendLaunch, 700);
+    teamSetStatus("Starting the AI match for your party...");
     startMatch(selectedAI);
   }
 
