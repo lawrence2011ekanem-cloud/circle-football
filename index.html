@@ -1061,8 +1061,13 @@
           teamLeaderPeerId = data.leaderPeerId;
           teamRoster = data.roster;
           teamRender(); teamSetStatus("You're in the party and connected to its leader!");
-        } else if (data.type === "party-error") {
-          teamCleanup(data.message || "Could not join party.");
+        } else if (data.type === "party-match-start") {
+          // Only the confirmed party leader may launch the party's AI mode.
+          if (data.leaderPeerId !== teamLeaderPeerId) return;
+          const selectedAI = Number(data.aiCount);
+          if (selectedAI !== 1 && selectedAI !== 2) return;
+          teamSetStatus("Party leader started an AI match. Joining the same mode...");
+          startMatch(selectedAI);
         } else if (data.type === "party-disbanded") {
           teamCleanup("The party was disbanded by its leader.");
         }
@@ -1897,6 +1902,24 @@
     cpu.__kickoffHunt = 4.5;
     player.__mpCharging = false;
     cpu.__mpCharging = false;
+  }
+
+  function startPartyAIMatch(selectedAI) {
+    if (selectedAI !== 1 && selectedAI !== 2) return;
+    if (!teamPartyCode || !teamLeader) return;
+    // Tell every confirmed party member to enter the same AI mode before the leader starts.
+    const packet = {
+      type: "party-match-start",
+      leaderPeerId: teamLeaderPeerId,
+      aiCount: selectedAI,
+      startedAt: Date.now()
+    };
+    for (const conn of teamConnections.values()) {
+      if (conn.open) {
+        try { conn.send(packet); } catch (_) {}
+      }
+    }
+    startMatch(selectedAI);
   }
 
   function startMatch(selectedAI) {
@@ -3319,7 +3342,16 @@
 
   aiChoices.forEach(button => {
     button.addEventListener("click", () => {
-      startMatch(Number(button.dataset.ai));
+      const selectedAI = Number(button.dataset.ai);
+      if (teamPartyCode) {
+        if (!teamLeader) {
+          teamSetStatus("Your party leader chooses the AI match. Wait for them to start it.");
+          return;
+        }
+        startPartyAIMatch(selectedAI);
+        return;
+      }
+      startMatch(selectedAI);
     });
   });
 
