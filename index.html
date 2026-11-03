@@ -945,6 +945,7 @@
   let teamClientConn = null;
   let teamMemberId = "";
   let teamLastLaunchId = "";
+  let teamActiveLaunchId = "";
   let teamLaunchRetryTimer = null;
   let teamLaunchAcks = new Set();
 
@@ -1020,6 +1021,22 @@
           teamRoster.push({ id, name:String(data.name || "Player").slice(0,24), role:"member" });
           conn.send({type:"party-state", code:teamPartyCode, leaderPeerId:teamLeaderPeerId, roster:teamRoster});
           teamSendRoster(); teamRender(); teamSetStatus("A player joined your party.");
+        } else if (data.type === "party-match-ack") {
+          // Track confirmations from the exact peer connection that received this launch.
+          if (typeof data.launchId === "string" && data.memberId === id) {
+            const ackKey = id + ":" + data.launchId;
+            if (teamConnections.get(id) === conn && teamActiveLaunchId === data.launchId) {
+              teamLaunchAcks.add(ackKey);
+              if (data.status === "error") {
+                teamSetStatus("A party member couldn't start the match: " + String(data.message || "unknown error"));
+              } else {
+                teamSetStatus("Party launch confirmed by " + (teamRoster.find(person => person.id === id)?.name || "a teammate") + ".");
+              }
+              if (teamLaunchRetryTimer && teamConnections.size > 0 && [...teamConnections.keys()].every(peerId => teamLaunchAcks.has(peerId + ":" + teamActiveLaunchId))) {
+                clearInterval(teamLaunchRetryTimer); teamLaunchRetryTimer = null;
+              }
+            }
+          }
         } else if (data.type === "party-leave") {
           teamConnections.delete(id); teamRoster = teamRoster.filter(person => person.id !== id);
           teamSendRoster(); teamRender(); teamSetStatus("A player left the party.");
@@ -1067,7 +1084,9 @@
           teamRender(); teamSetStatus("You're in the party and connected to its leader!");
         } else if (data.type === "party-match-start") {
           // Only the confirmed party leader may launch the party's AI mode.
-          if (data.leaderPeerId !== teamLeaderPeerId || !teamRoster.some(person => person.id === teamLeaderPeerId)) return;
+          if (!teamClientConn || !teamClientConn.open || data.leaderPeerId !== teamLeaderPeerId ||
+              !teamRoster.some(person => person.id === teamLeaderPeerId) ||
+              !teamRoster.some(person => person.id === teamMemberId)) return;
           const selectedAI = Number(data.aiCount);
           if (selectedAI !== 1 && selectedAI !== 2) return;
           const launchId = String(data.launchId || (data.leaderPeerId + ":" + data.startedAt));
@@ -1927,6 +1946,7 @@
     if (teamLaunchRetryTimer) { clearInterval(teamLaunchRetryTimer); teamLaunchRetryTimer = null; }
     teamLaunchAcks = new Set();
     const launchId = teamLeaderPeerId + ":" + Date.now() + ":" + Math.random().toString(36).slice(2,8);
+    teamActiveLaunchId = launchId;
     const packet = { type:"party-match-start", leaderPeerId:teamLeaderPeerId, aiCount:selectedAI, startedAt:Date.now(), launchId };
     let attempts = 0;
     const sendLaunch = () => {
