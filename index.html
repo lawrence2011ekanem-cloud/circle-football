@@ -607,7 +607,7 @@
   const PROFILE_KEY = "circleFootballGoogleProfile";
   // Replace this with your Google Cloud Console Web OAuth Client ID.
   // A client ID is public; never put a client secret in browser code.
-  const GOOGLE_CLIENT_ID = "YOUR_GOOGLE_CLIENT_ID";
+  const GOOGLE_CLIENT_ID = "511920948471-lkn3he4ulq33vm4at7h6nhk9c4jkhc6v.apps.googleusercontent.com";
 
   const toggle = document.getElementById("cfAccountToggle");
   const panel = document.getElementById("cfAccountPanel");
@@ -2341,19 +2341,34 @@
       targetX = clamp(ball.x - gx * 85, minX, maxX);
       targetY = clamp(ball.y - gy * 85, minY, maxY);
 
-      // If that fallback still puts us right against a wall, retreat toward
-      // the center instead of faceplanting into the corner.
-      const nearRightWall = ball.x > field.right - ball.r - 8;
-      const nearLeftWall = ball.x < field.left + ball.r + 8;
-      const nearBottom = ball.y > field.bottom - ball.r - 8;
-      const nearTop = ball.y < field.top + ball.r + 8;
+      // Controlled corner pressure: don't abandon the ball when a player
+      // takes it to a boundary. Approach from inside the pitch on a diagonal,
+      // leaving enough room to make contact without driving straight into the
+      // wall or repeatedly pinning the ball in the corner.
+      const nearRightWall = ball.x > field.right - ball.r - 14;
+      const nearLeftWall = ball.x < field.left + ball.r + 14;
+      const nearBottom = ball.y > field.bottom - ball.r - 14;
+      const nearTop = ball.y < field.top + ball.r + 14;
+      const nearAnyWall = nearRightWall || nearLeftWall || nearBottom || nearTop;
+      const nearCorner = (nearRightWall || nearLeftWall) && (nearTop || nearBottom);
 
-      if ((nearRightWall || nearLeftWall || nearBottom || nearTop) && !mouth && !nearLeftGoal) {
-        targetX = field.right - 95;
-        targetY = H / 2;
+      if (nearAnyWall && !mouth && !nearLeftGoal) {
+        // Keep the approach modest: the AI pressures the ball, but does not
+        // sprint directly into the wall. At a corner, bias the target toward
+        // the pitch interior so contact tends to pull the ball back into play.
+        const inwardY = nearTop ? 1 : nearBottom ? -1 : (ball.y < H / 2 ? 1 : -1);
+        const inwardX = nearLeftWall ? 1 : nearRightWall ? -1 : (ball.x < W / 2 ? 1 : -1);
+        const approachX = nearCorner ? 54 : 42;
+        const approachY = nearCorner ? 54 : 34;
 
-        // Stay on our side of the pitch while the ball is trapped.
-        if (ball.x < W / 2) targetX = field.left + 95;
+        targetX = clamp(ball.x + inwardX * approachX,
+          field.left + cpu.r, field.right - cpu.r);
+        targetY = clamp(ball.y + inwardY * approachY,
+          field.top + cpu.r, field.bottom - cpu.r);
+
+        // In two-AI mode the striker remains in its attacking half; the
+        // defender handles deep pressure on the right side.
+        if (aiCount === 2) targetX = Math.min(targetX, W / 2 + 24);
       }
     }
 
