@@ -3,442 +3,361 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Circle Football — Matchmaking Server Test</title>
+<title>Circle Football</title>
+<meta name="theme-color" content="#04100a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700&family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,800&display=swap">
 <style>
+  /* ===== Circle Football — match-day UI ===== */
+  :root {
+    --night:#04100a; --panel:#0b1d11; --panel-2:#12291a; --panel-3:#1b3b26;
+    --chalk:#f3f6ef; --chalk-dim:#b4c6b7;
+    --line:rgba(243,246,239,.16); --line-strong:rgba(243,246,239,.34);
+    --home:#22c55e; --away:#ef4444;
+    --amber:#ffc933; --amber-ink:#2a1d00; --red-card:#d62828;
+    --display:"Barlow Condensed","Arial Narrow","Roboto Condensed",Impact,sans-serif;
+    --body:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    color-scheme: dark;
+  }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body {
     margin: 0;
     min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #111827;
-    color: #f8fafc;
-    font-family: Arial, Helvetica, sans-serif;
+    color: var(--chalk);
+    font-family: var(--body);
     overflow: hidden;
+    background:
+      radial-gradient(120% 70% at 50% -12%, rgba(255,226,140,.13), transparent 60%),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.018) 0 90px, rgba(0,0,0,0) 90px 180px),
+      var(--night);
   }
   .wrap {
     width: min(1000px, 96vw);
+    /* Keep the whole game (scoreboard + pitch + footer) on screen on short windows. */
+    width: min(1000px, 96vw, calc((100dvh - 140px) * 16 / 9));
   }
-  .top {
-    position: relative;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 10px;
-  }
-  h1 { margin: 0; font-size: 24px; }
-  .hint { color: #cbd5e1; font-size: 14px; }
-  .score-area { display: flex; align-items: center; gap: 12px; margin-left:auto; }
-  .score-stack { display:flex; flex-direction:column; align-items:flex-end; gap:5px; }
-  .cooldown-row { display:flex; gap:5px; flex-wrap:wrap; justify-content:flex-end; }
-  .cooldown-row .dash-cooldown-hud, .cooldown-row .lob-cooldown-hud { position:static; min-width:0; padding:4px 7px; font-size:11px; border-radius:7px; white-space:nowrap; }
-  #mainModeChoices { display:flex; justify-content:center; align-items:stretch; gap:10px; flex-wrap:nowrap; width:100%; }
-  #mainModeChoices .modeChoice { flex:1 1 0; min-width:0; margin:0; padding:14px 12px; }
-  #teamToggle { flex:1 1 0; min-width:0 !important; margin:0 !important; padding:14px 12px !important; font-size:19px; }
-  #controlsToggle { display:block; width:100%; min-width:0; margin-top:12px; padding:13px 18px; font-size:16px; background:#0f766e; border:1px solid #5eead4; }
-  #controlsToggle:hover { background:#115e59; }
-  .menu-controls { margin:8px auto 0; padding:13px 15px; border:1px solid rgba(148,163,184,.35); border-radius:12px; background:rgba(15,23,42,.55); text-align:left; width:100%; max-width:100%; }
-  .menu-controls h3 { margin:0 0 8px; text-align:center; font-size:15px; color:#e2e8f0; }
-  .menu-controls[hidden] { display:none !important; }
-  .menu-controls p { margin:5px 0; font-size:13px; line-height:1.45; color:#cbd5e1; }
-  #timer { position:absolute; left:50%; top:0; transform:translateX(-50%); font-variant-numeric: tabular-nums; min-width: 48px; text-align: center; font-weight: 900; font-size: 22px; }
 
-  #score {
-    font-size: 20px;
-    font-weight: 700;
-    white-space: nowrap;
+  /* ---------- Scoreboard ---------- */
+  .top { display: flex; justify-content: center; margin-bottom: 10px; }
+  .scoreboard {
+    display: grid;
+    grid-template-columns: minmax(0,1fr) auto minmax(0,1fr);
+    width: min(680px, 100%);
+    overflow: hidden;
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    background: var(--panel);
+    box-shadow: 0 10px 28px rgba(0,0,0,.4);
   }
+  .sb-team {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    min-width: 0; padding: 6px 14px;
+    font: 700 24px/1 var(--display); letter-spacing: .05em;
+  }
+  .sb-me  { border-left: 7px solid var(--me, var(--home)); }
+  .sb-opp { border-right: 7px solid var(--opp, var(--away)); }
+  .sb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sb-score {
+    flex: none; min-width: 2ch; padding: 4px 8px 2px; border-radius: 6px;
+    background: var(--chalk); color: #06130a;
+    font: 800 34px/1 var(--display); text-align: center; font-variant-numeric: tabular-nums;
+  }
+  #timer {
+    display: grid; place-items: center; min-width: 96px; padding: 0 18px;
+    background: #06130a; border-inline: 1px solid var(--line);
+    color: var(--amber); font: 800 30px/1 var(--display); letter-spacing: .04em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- Pitch frame ---------- */
   .game-shell {
     position: relative;
     width: 100%;
     aspect-ratio: 16 / 9;
-    border-radius: 14px;
+    border-radius: 12px;
     overflow: hidden;
-    box-shadow: 0 18px 50px rgba(0,0,0,.35);
-    background: #15803d;
+    background: #135a2a;
+    box-shadow: 0 0 0 1px var(--line), 0 24px 60px rgba(0,0,0,.55);
   }
-  canvas {
-    width: 100%;
-    height: 100%;
-    display: block;
-    cursor: crosshair;
-  }
-  .dash-cooldown-hud {
-    position:absolute; left:12px; top:12px; z-index:4;
-    padding:7px 11px; border:1px solid rgba(255,255,255,.7); border-radius:10px;
-    background:rgba(15,23,42,.86); color:#f8fafc; font-size:13px; font-weight:900;
-    letter-spacing:.3px; pointer-events:none; min-width:116px; text-align:center;
-  }
-  .dash-cooldown-hud.ready { color:#bbf7d0; border-color:#4ade80; }
-  .lob-cooldown-hud { position:absolute; left:12px; top:49px; z-index:4; padding:6px 10px; border:1px solid rgba(255,255,255,.65); border-radius:9px; background:rgba(15,23,42,.78); color:#fef3c7; font-size:12px; font-weight:900; letter-spacing:.2px; pointer-events:none; min-width:116px; text-align:center; }
-  .score-area .lob-cooldown-hud { position:static; left:auto; top:auto; min-width:0; padding:4px 8px; font-size:11px; border-radius:7px; white-space:nowrap; }
-  .lob-cooldown-hud.ready { color:#bbf7d0; border-color:#4ade80; }
-  .dash-cooldown-hud.cooling { color:#fde68a; border-color:#fbbf24; }
-  .charge-wrap {
-    position: absolute;
-    left: 50%;
-    bottom: 14px;
-    transform: translateX(-50%);
-    width: min(300px, 55%);
-    pointer-events: none;
-  }
-  .charge-label {
-    text-align: center;
-    font-size: 12px;
-    margin-bottom: 5px;
-    text-shadow: 0 1px 2px #000;
-  }
-  .bar {
-    height: 12px;
-    border: 2px solid rgba(255,255,255,.9);
-    border-radius: 999px;
-    background: rgba(0,0,0,.35);
-    overflow: hidden;
-  }
-  #charge {
-    height: 100%;
-    width: 0%;
-    background: #facc15;
-    transition: width .03s linear;
-  }
-  .message {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    pointer-events: none;
-  }
-  #goalMessage {
-    opacity: 0;
-    transform: scale(.8);
-    font-size: clamp(28px, 6vw, 64px);
-    font-weight: 900;
-    text-shadow: 0 4px 12px rgba(0,0,0,.45);
-    transition: opacity .15s, transform .15s;
-  }
-  #goalMessage.show {
-    opacity: 1;
-    transform: scale(1);
-  }
-  #goalMessage.fade-out {
-    opacity: 0;
-    transform: scale(1.08);
-  }
-  .fulltime-controls {
-    display: flex;
-    gap: 10px;
-    justify-content: center;
-    margin-top: 18px;
-    pointer-events: auto;
-  }
-  .fulltime-controls button {
-    font-size: 15px;
-    padding: 10px 16px;
-    background: #2563eb;
-  }
-  .fulltime-controls button:hover { background: #1d4ed8; }
-  .fulltime-controls #backMenuBtn { background: #475569; }
-  .fulltime-controls #backMenuBtn:hover { background: #64748b; }
-  .bottom {
-    margin-top: 9px;
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    color: #cbd5e1;
-    font-size: 13px;
-  }
-  button {
-    border: 0;
-    border-radius: 8px;
-    padding: 8px 12px;
-    background: #334155;
-    color: white;
-    cursor: pointer;
-    font-weight: 700;
-  }
-  button:hover { background: #475569; }
+  canvas { width: 100%; height: 100%; display: block; cursor: default; touch-action: none; }
+  canvas:focus { outline: none; }
 
-  .menu-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 20;
-    display: grid;
-    place-items: center;
-    background: rgba(17,24,39,.92);
+  .hud { position: absolute; left: 10px; top: 7px; z-index: 4; display: flex; gap: 6px; pointer-events: none; }
+  .hud-chip {
+    position: relative; isolation: isolate; overflow: hidden;
+    padding: 6px 12px; border: 1px solid var(--line-strong); border-radius: 999px;
+    background: rgba(6,19,10,.82); color: var(--chalk-dim);
+    font: 700 13px/1 var(--display); letter-spacing: .06em; white-space: nowrap;
   }
-  .menu-overlay.team-open { grid-template-columns: 320px minmax(0, 1fr); gap: 18px; padding: 18px; }
-  .menu-overlay.team-open .menu-card { grid-column:2; transform:none; }
-  .team-panel { display:none; position:absolute; left:18px; top:50%; transform:translateY(-50%); width:300px; max-height:calc(100% - 36px); overflow:auto; padding:20px; border:1px solid rgba(148,163,184,.35); border-radius:16px; background:#1f2937; box-shadow:0 18px 45px rgba(0,0,0,.4); text-align:left; }
-  .menu-overlay.team-open .team-panel { display:block; }
-  .team-panel h3 { margin:0 0 8px; font-size:22px; text-align:center; }
-  .team-panel p { color:#cbd5e1; font-size:13px; line-height:1.45; }
-  .team-code { padding:10px; margin:12px 0; border-radius:9px; background:#111827; text-align:center; font-size:23px; font-weight:800; letter-spacing:3px; overflow-wrap:anywhere; }
-  .team-roster { list-style:none; margin:12px 0; padding:0; }
-  .team-roster li { padding:9px 10px; margin:5px 0; background:#334155; border-radius:8px; }
-  .team-panel input { width:100%; margin:5px 0 8px; padding:11px; border:1px solid #64748b; border-radius:8px; background:#0f172a; color:#f8fafc; font-size:16px; }
-  .team-panel button { width:100%; margin:5px 0; padding:10px 12px; }
-  #teamCreateBtn { background:#15803d; }
-  #teamJoinBtn { background:#2563eb; }
-  #teamLeaveBtn { background:#b45309; }
-  #teamDisbandBtn { background:#b91c1c; }
-  #teamStatus { min-height:34px; margin:8px 0; }
-  @media (max-width: 700px) {
-    /* On phones, stack the party panel above the menu rather than crushing
-       the menu into a narrow right-hand column. The overlay remains scrollable. */
-    .menu-overlay.team-open {
-      display:flex !important; flex-direction:column !important; align-items:center !important; justify-content:flex-start !important;
-      grid-template-columns:minmax(0, 1fr) !important; gap:12px; overflow-x:hidden; overflow-y:auto;
-      box-sizing:border-box; width:100%; max-width:100vw; padding:max(10px, env(safe-area-inset-top)) 10px 14px;
-    }
-    .menu-overlay.team-open .team-panel {
-      display:block; position:relative; inset:auto; left:auto; top:auto; order:0; flex:0 0 auto;
-      transform:none; box-sizing:border-box; width:100%; max-width:480px; min-width:0;
-      max-height:none; overflow:visible; padding:12px; margin:0 auto;
-    }
-    .menu-overlay.team-open .menu-card {
-      display:block; position:relative; order:1; flex:0 0 auto; grid-column:auto;
-      transform:none; box-sizing:border-box; margin:0 auto; width:100%; max-width:480px; min-width:0;
-      padding:20px 12px;
-    }
-    .menu-overlay.team-open .menu-card h2 { font-size:clamp(25px, 7vw, 34px); margin-bottom:14px; }
-    .menu-overlay.team-open #modeSelect > p { font-size:14px; margin-bottom:12px; }
-    .menu-overlay.team-open #mainModeChoices { display:grid; width:100%; min-width:0; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:5px; }
-    .menu-overlay.team-open #mainModeChoices > *,
-    .menu-overlay.team-open #modeSelect { min-width:0; max-width:100%; box-sizing:border-box; }
-    .menu-overlay.team-open #mainModeChoices .modeChoice,
-    .menu-overlay.team-open #teamToggle {
-      min-width:0; width:100%; margin:0; padding:10px 3px !important;
-      font-size:clamp(11px, 3.1vw, 14px); overflow-wrap:anywhere;
-    }
-    .menu-overlay.team-open #controlsToggle { min-width:0; width:100%; margin-top:10px; padding:11px 8px; }
-    .team-panel h3 { font-size:18px; }
-    .team-panel p { font-size:12px; }
-    .team-code { font-size:17px; letter-spacing:1px; }
-    .team-panel button { padding:9px 5px; font-size:12px; }
+  /* Cooldown fill: --p goes 1 -> 0 as the ability recharges. */
+  .hud-chip::before {
+    content: ""; position: absolute; inset: 0; z-index: -1;
+    background: rgba(255,201,51,.28); transform-origin: left; transform: scaleX(var(--p, 0));
   }
-  .menu-card {
-    text-align: center;
-    padding: 42px 55px;
-    border-radius: 18px;
-    background: #1f2937;
-    box-shadow: 0 20px 60px rgba(0,0,0,.45);
+  .hud-chip.ready { color: #b9f5c9; border-color: #3ddc7a; }
+  .dash-cooldown-hud.cooling, .lob-cooldown-hud:not(.ready) { color: var(--amber); border-color: var(--amber); }
+
+  .charge-wrap { position: absolute; left: 50%; bottom: 7px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; width: min(340px, 62%); pointer-events: none; }
+  .charge-label { flex: none; font: 700 13px/1 var(--display); letter-spacing: .1em; white-space: nowrap; text-shadow: 0 1px 3px #000; }
+  .bar { flex: 1; height: 11px; border: 2px solid rgba(243,246,239,.9); border-radius: 999px; background: rgba(0,0,0,.4); overflow: hidden; }
+  #charge {
+    height: 100%; width: 0%; transition: width .03s linear;
+    background: repeating-linear-gradient(90deg, var(--amber) 0 9px, #d99a00 9px 11px);
   }
-  .menu-card h2 {
-    margin: 0 0 24px;
-    font-size: clamp(36px, 7vw, 64px);
-  }
-  #playBtn {
-    min-width: 180px;
-    padding: 14px 30px;
-    font-size: 20px;
-    background: #16a34a;
-  }
-  #playBtn:hover { background: #15803d; }
-  #modeSelect p { margin: 0 0 18px; color: #cbd5e1; font-size: 18px; }
-  .modeChoice { min-width: 180px; margin: 6px; padding: 14px 24px; font-size: 19px; }
-  #cpuBtn { background: #2563eb; }
-  #cpuBtn:hover { background: #1d4ed8; }
-  #multiplayerBtn { background: #7c3aed; }
-  #multiplayerBtn:hover { background: #6d28d9; }
-  #searchOpponentsBtn { display:block; width:100%; min-height:50px; margin:12px 0 8px; padding:14px; background:#047857; border:2px solid #34d399; border-radius:10px; font-size:17px; font-weight:700; position:relative; z-index:2; }
-  #searchOpponentsBtn:hover { background:#065f46; }
-  #searchOpponentsBtn:disabled { opacity:.7; cursor:wait; }
-  #cancelSearchBtn { width:100%; margin-top:6px; background:#475569; }
-  #mpSearchStatus { margin:10px 0 0; color:#cbd5e1; font-size:13px; line-height:1.45; overflow-wrap:anywhere; }
-  #mpSearchStatus[hidden], #cancelSearchBtn[hidden] { display:none !important; }
-  .aiChoice { min-width: 120px; margin: 6px; padding: 13px 20px; font-size: 18px; background: #2563eb; }
-  .aiChoice:hover { background: #1d4ed8; }
-  #backModeBtn { margin-top: 12px; background: #475569; }
-  #backModeBtn:hover { background: #64748b; }
-  .countdown-overlay {
-    position: absolute;
-    inset: 0;
-    z-index: 5;
-    display: grid;
-    place-items: center;
-    pointer-events: none;
-  }
+
+  .countdown-overlay { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; pointer-events: none; }
   #countdown {
-    font-size: clamp(64px, 13vw, 130px);
-    font-weight: 900;
-    text-shadow: 0 5px 18px rgba(0,0,0,.5);
+    font: 800 clamp(72px, 14vw, 150px)/1 var(--display); font-style: italic;
+    text-shadow: 0 6px 0 rgba(0,0,0,.28), 0 0 40px rgba(255,201,51,.35);
     transition: opacity .7s ease, transform .7s ease;
   }
-  #countdown.fade-out {
-    opacity: 0;
-    transform: scale(1.06);
-  }
+  #countdown.fade-out { opacity: 0; transform: scale(1.06); }
 
-  .mp-overlay {
-    position: absolute;
-    inset: 0;
-    display: none;
-    place-items: center;
-    background: rgba(15,23,42,.72);
-    z-index: 20;
+  .message { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; pointer-events: none; }
+  #goalMessage {
+    padding: .12em .8em; text-align: center;
+    font: 800 clamp(34px, 7vw, 76px)/1.05 var(--display); font-style: italic; letter-spacing: .02em;
+    background: linear-gradient(90deg, transparent, rgba(4,16,10,.8) 18%, rgba(4,16,10,.8) 82%, transparent);
+    text-shadow: 0 3px 0 rgba(0,0,0,.35);
+    opacity: 0; transform: scale(.85); transition: opacity .15s, transform .15s;
   }
+  #goalMessage.show { opacity: 1; transform: scale(1); }
+  #goalMessage.fade-out { opacity: 0; transform: scale(1.08); }
+  .fulltime-controls { display: flex; gap: 10px; justify-content: center; margin-top: 18px; pointer-events: auto; }
+  .fulltime-controls button { font-size: 17px; padding: 11px 20px; }
+
+  .bottom { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; color: var(--chalk-dim); font-size: 13px; }
+  .bottom span { min-width: 0; }
+
+  /* ---------- Buttons & inputs ---------- */
+  button {
+    font: inherit; font-weight: 700;
+    padding: 9px 14px; border: 1px solid var(--line-strong); border-radius: 10px;
+    background: var(--panel-2); color: var(--chalk); cursor: pointer;
+    transition: background .15s, border-color .15s, transform .05s;
+  }
+  button:hover { background: var(--panel-3); border-color: rgba(243,246,239,.55); }
+  button:active { transform: translateY(1px); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  button:disabled { opacity: .6; cursor: wait; }
+  button.primary { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); }
+  button.primary:hover { background: #ffd75e; border-color: #ffd75e; }
+  input {
+    width: 100%; padding: 11px 12px; border: 1px solid var(--line-strong); border-radius: 10px;
+    background: #06130a; color: var(--chalk); font: 600 16px var(--body);
+  }
+  input::placeholder { color: #6f8a76; }
+
+  /* ---------- Menu ---------- */
+  .menu-overlay {
+    position: fixed; inset: 0; z-index: 20; display: grid; padding: 24px 20px; overflow: auto;
+    background: linear-gradient(rgba(3,13,7,.78), rgba(3,13,7,.9)), url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201600%20900%27%20preserveAspectRatio%3D%27xMidYMid%20slice%27%3E%3Crect%20width%3D%271600%27%20height%3D%27900%27%20fill%3D%27%2314602d%27%2F%3E%3Crect%20x%3D%27160%27%20width%3D%27160%27%20height%3D%27900%27%20fill%3D%27%231a7a38%27%2F%3E%3Crect%20x%3D%27480%27%20width%3D%27160%27%20height%3D%27900%27%20fill%3D%27%231a7a38%27%2F%3E%3Crect%20x%3D%27800%27%20width%3D%27160%27%20height%3D%27900%27%20fill%3D%27%231a7a38%27%2F%3E%3Crect%20x%3D%271120%27%20width%3D%27160%27%20height%3D%27900%27%20fill%3D%27%231a7a38%27%2F%3E%3Crect%20x%3D%271440%27%20width%3D%27160%27%20height%3D%27900%27%20fill%3D%27%231a7a38%27%2F%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%23fff%27%20stroke-opacity%3D%27.55%27%20stroke-width%3D%276%27%3E%3Crect%20x%3D%2780%27%20y%3D%2760%27%20width%3D%271440%27%20height%3D%27780%27%2F%3E%3Cpath%20d%3D%27M800%2060V840%27%2F%3E%3Ccircle%20cx%3D%27800%27%20cy%3D%27450%27%20r%3D%27130%27%2F%3E%3Crect%20x%3D%2780%27%20y%3D%27235%27%20width%3D%27260%27%20height%3D%27430%27%2F%3E%3Crect%20x%3D%271260%27%20y%3D%27235%27%20width%3D%27260%27%20height%3D%27430%27%2F%3E%3Crect%20x%3D%2780%27%20y%3D%27340%27%20width%3D%2790%27%20height%3D%27220%27%2F%3E%3Crect%20x%3D%271430%27%20y%3D%27340%27%20width%3D%2790%27%20height%3D%27220%27%2F%3E%3C%2Fg%3E%3Ccircle%20cx%3D%27800%27%20cy%3D%27450%27%20r%3D%279%27%20fill%3D%27%23fff%27%20fill-opacity%3D%27.55%27%2F%3E%3C%2Fsvg%3E") center / cover no-repeat, #0a2a14;
+  }
+  .menu-overlay.team-open { grid-template-columns: 320px minmax(0,1fr); gap: 18px; padding: 18px; }
+  .menu-overlay.team-open .menu-card { grid-column: 2; }
+  .menu-card {
+    width: min(680px, 100%); margin: auto; padding: 34px 38px 30px; text-align: center;
+    border: 2px solid rgba(243,246,239,.5); border-radius: 18px; background: var(--panel);
+    box-shadow: 0 0 0 6px rgba(3,13,7,.5), 0 30px 80px rgba(0,0,0,.6);
+  }
+  .brand { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 22px; }
+  .brand h2 { margin: 0; font: 800 clamp(34px, 6.4vw, 62px)/1 var(--display); font-style: italic; letter-spacing: .01em; white-space: nowrap; }
+  .brand-ball { width: clamp(38px, 6vw, 56px); height: auto; flex: none; }
+  @media (prefers-reduced-motion: no-preference) {
+    .brand-ball { animation: ball-in .9s cubic-bezier(.2,.7,.2,1) both; }
+  }
+  @keyframes ball-in { from { transform: translateX(-140px) rotate(-540deg); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  #modeSelect p { margin: 0 0 14px; color: var(--chalk-dim); font-size: 17px; }
+  #mainModeChoices { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; width: 100%; }
+  .ai-row { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin-bottom: 12px; }
+  .modeChoice, .aiChoice {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    min-width: 0; margin: 0; padding: 18px 10px 16px; border-radius: 14px;
+  }
+  .modeChoice:hover, .aiChoice:hover, .modeChoice[aria-expanded="true"] { border-color: var(--amber); }
+  .modeChoice[aria-expanded="true"] { background: var(--panel-3); }
+  .mode-ico { width: 34px; height: 34px; color: var(--amber); fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .mode-name { font: 800 26px/1 var(--display); letter-spacing: .03em; }
+  .mode-sub { font: 500 13px/1.25 var(--body); color: var(--chalk-dim); }
+  #backModeBtn { min-width: 120px; }
+  #controlsToggle { display: block; width: 100%; margin-top: 14px; background: transparent; border-style: dashed; }
+  #controlsToggle:hover { background: var(--panel-2); }
+  .menu-controls { margin: 10px auto 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: rgba(6,19,10,.6); text-align: left; }
+  .menu-controls h3 { margin: 0 0 8px; text-align: center; font: 700 20px/1 var(--display); letter-spacing: .05em; }
+  .menu-controls p { margin: 6px 0 !important; font-size: 14px !important; line-height: 1.45; color: var(--chalk-dim) !important; }
+  .menu-controls strong { color: var(--amber); }
+
+  /* Squad sheet (party) */
+  .team-panel {
+    display: none; position: absolute; left: 18px; top: 50%; transform: translateY(-50%);
+    width: 300px; max-height: calc(100% - 36px); overflow: auto; padding: 20px;
+    border: 2px solid rgba(243,246,239,.4); border-radius: 16px; background: var(--panel);
+    box-shadow: 0 20px 50px rgba(0,0,0,.5); text-align: left;
+  }
+  .menu-overlay.team-open .team-panel { display: block; }
+  .team-panel h3 { margin: 0 0 8px; text-align: center; font: 800 30px/1 var(--display); font-style: italic; }
+  .team-panel p { color: var(--chalk-dim); font-size: 13px; line-height: 1.45; }
+  .team-code {
+    margin: 10px 0 14px; padding: 10px; border: 1px dashed var(--line-strong); border-radius: 10px; background: #06130a;
+    text-align: center; color: var(--amber); font: 800 32px/1 var(--display); letter-spacing: .22em; overflow-wrap: anywhere;
+  }
+  .team-rule { margin: 14px 0; border: 0; border-top: 1px solid var(--line); }
+  .team-panel input { margin: 5px 0 8px; }
+  .team-panel button { width: 100%; margin: 5px 0; padding: 10px 12px; }
+  #teamLeaveBtn { border-color: #b45309; color: #fcd34d; }
+  #teamDisbandBtn { background: var(--red-card); border-color: #ff7b7b; }
+  #teamDisbandBtn:hover { background: #b51f1f; }
+  #teamStatus { min-height: 34px; margin: 8px 0; }
+  .team-roster { counter-reset: squad; list-style: none; margin: 10px 0 12px; padding: 0; }
+  .team-roster li {
+    counter-increment: squad; display: flex; align-items: center; gap: 10px;
+    margin: 5px 0; padding: 8px 10px; border-radius: 10px; background: var(--panel-2);
+  }
+  .team-roster li::before {
+    content: counter(squad); flex: none; display: grid; place-items: center; width: 24px; height: 24px;
+    border-radius: 50%; background: var(--chalk); color: #06130a; font: 800 14px/1 var(--display);
+  }
+  .team-roster li.empty::before { display: none; }
+
+  /* ---------- Multiplayer dialog ---------- */
+  .mp-overlay { position: fixed; inset: 0; z-index: 25; display: none; place-items: center; padding: 16px; overflow: auto; background: rgba(3,13,7,.88); }
   .mp-card {
-    width: min(520px, 88%);
-    padding: 28px;
-    border-radius: 18px;
-    background: rgba(15,23,42,.97);
-    box-shadow: 0 20px 60px rgba(0,0,0,.45);
-    text-align: center;
+    width: min(520px, 100%); margin: auto; padding: 28px; text-align: center;
+    border: 2px solid rgba(243,246,239,.45); border-radius: 18px; background: var(--panel);
+    box-shadow: 0 30px 80px rgba(0,0,0,.6);
   }
-  .mp-card h3 { margin: 0 0 8px; font-size: 30px; }
-  .mp-card p { color: #cbd5e1; margin: 8px 0 16px; }
-  .mp-actions { display:flex; justify-content:center; flex-wrap:wrap; gap:10px; }
-  .mp-card input {
-    width: min(360px, 100%);
-    padding: 12px 14px;
-    border-radius: 9px;
-    border: 1px solid #475569;
-    background: #0f172a;
-    color: white;
-    text-align: center;
-    font-size: 18px;
-    letter-spacing: 1px;
-  }
+  .mp-card h3 { margin: 0 0 8px; font: 800 40px/1 var(--display); font-style: italic; }
+  .mp-card p { margin: 8px 0 16px; color: var(--chalk-dim); }
+  .mp-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; }
+  .mp-card input { width: min(360px, 100%); text-align: center; font: 700 22px/1.2 var(--display); letter-spacing: .2em; text-transform: uppercase; }
+  .mp-card input::placeholder { letter-spacing: .04em; text-transform: none; }
+  #searchOpponentsBtn { display: block; width: 100%; min-height: 52px; margin: 12px 0 8px; font-size: 18px; border-radius: 12px; position: relative; z-index: 2; }
+  #searchOpponentsBtn:disabled { opacity: .75; cursor: wait; }
+  #cancelSearchBtn { width: 100%; margin-top: 6px; }
+  #mpSearchStatus { margin: 10px 0 0 !important; color: var(--chalk-dim); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
   #roomCodeDisplay {
-    margin: 14px auto;
-    padding: 12px 16px;
-    width: fit-content;
-    max-width: 100%;
-    border-radius: 10px;
-    background: #1e293b;
-    font-family: monospace;
-    font-size: 17px;
-    word-break: break-all;
-    user-select: all;
+    width: fit-content; max-width: 100%; margin: 14px auto; padding: 12px 20px;
+    border: 1px dashed var(--line-strong); border-radius: 10px; background: #06130a; color: var(--amber);
+    font: 800 38px/1 var(--display); letter-spacing: .2em; word-break: break-all; user-select: all;
   }
-  #mpStatus { min-height: 24px; color: #facc15; font-weight: 700; }
-  .mp-small { font-size: 12px; color:#94a3b8; margin-top:12px; }
+  #mpStatus { min-height: 24px; color: var(--amber) !important; font-weight: 700; }
+  .mp-small { margin-top: 12px; color: #86a08b; font-size: 12px; }
 
+  /* ---------- Player account ---------- */
+  #cfAccount {
+    display: none; position: fixed; top: max(14px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right));
+    z-index: 30; width: min(280px, calc(100vw - 28px)); text-align: left; font: 14px/1.4 var(--body);
+  }
+  #cfAccountToggle {
+    width: 100%; min-height: 42px; padding: 10px 16px; border-radius: 999px; background: var(--panel);
+    text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 6px 18px rgba(0,0,0,.4);
+  }
+  #cfAccountPanel { margin-top: 7px; padding: 14px; border: 1px solid var(--line-strong); border-radius: 14px; background: var(--panel); box-shadow: 0 12px 32px rgba(0,0,0,.55); }
+  #cfAccountPanel label { display: block; margin: 8px 0 5px; font-weight: 700; }
+  #cfAccountPanel button { width: 100%; min-height: 40px; margin-top: 8px; }
+  .cf-note { margin: 5px 0 8px; color: var(--chalk-dim); font-size: 12px; }
+  #cfGoogleButton { display: flex; justify-content: center; margin-top: 9px; min-height: 40px; }
+  #cfAccountStatus { min-height: 18px; margin: 8px 0 0; color: var(--chalk-dim); font-size: 12px; overflow-wrap: anywhere; }
+  #cfAccountHint { margin: 8px 0 0; color: #fcd34d; font-size: 11px; line-height: 1.35; }
 
-
-
-  /* Mobile/web publishing support */
-  canvas { touch-action: none; }
+  /* ---------- Touch controls ---------- */
   #touchControls {
-    display: none;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    width: 100%;
-    margin: 12px auto 0;
-    padding: 10px 8px;
-    border: 1px solid #334155;
-    border-radius: 14px;
-    background: rgba(15,23,42,.94);
-    user-select: none;
-    -webkit-user-select: none;
-    touch-action: none;
+    display: none; align-items: center; justify-content: space-between; gap: 12px;
+    width: 100%; margin: 10px auto 0; padding: 10px 8px;
+    border: 1px solid var(--line); border-radius: 16px; background: rgba(6,19,10,.92);
+    user-select: none; -webkit-user-select: none; touch-action: none;
   }
   .touch-joystick {
-    position:relative; width:clamp(118px, 34vw, 154px); height:clamp(118px, 34vw, 154px);
-    border-radius:50%; flex:0 0 auto; border:2px solid #64748b;
-    background:radial-gradient(circle, rgba(71,85,105,.55), rgba(15,23,42,.85));
-    touch-action:none; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent;
+    position: relative; flex: none; width: clamp(118px, 34vw, 154px); height: clamp(118px, 34vw, 154px);
+    border-radius: 50%; border: 2px solid var(--line-strong);
+    background:
+      radial-gradient(circle, transparent 0 21%, rgba(243,246,239,.28) 21% 23%, transparent 23%),
+      radial-gradient(circle, rgba(27,59,38,.75), rgba(6,19,10,.92));
+    touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
   }
   .joystick-knob {
-    position:absolute; left:50%; top:50%; width:44%; height:44%; border-radius:50%;
-    transform:translate(-50%,-50%); border:2px solid #cbd5e1; background:rgba(148,163,184,.85);
-    box-shadow:0 2px 8px rgba(0,0,0,.35); pointer-events:none;
+    position: absolute; left: 50%; top: 50%; width: 44%; height: 44%; border-radius: 50%;
+    transform: translate(-50%,-50%); border: 2px solid var(--chalk); background: rgba(243,246,239,.82);
+    box-shadow: 0 2px 8px rgba(0,0,0,.4); pointer-events: none;
   }
-  .joystick-label { position:absolute; inset:0; display:grid; place-items:center; color:#e2e8f0; font-size:10px; font-weight:800; opacity:.55; pointer-events:none; }
+  .joystick-label { position: absolute; inset: 0; display: grid; place-items: end center; padding-bottom: 9px; pointer-events: none; color: var(--chalk); font: 700 12px/1 var(--display); letter-spacing: .1em; opacity: .5; }
   .touch-key {
-    display: flex; align-items: center; justify-content: center;
-    padding: 0; margin: 0; border-radius: 12px;
-    border: 1px solid #64748b; background: #334155;
-    font-size: 22px; font-weight: 900; touch-action: none;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .touch-key.pressed, .shoot-button.pressed { background: #2563eb; transform: scale(.97); }
-  .dash-button { width: min(100%, 150px); min-height: 48px; font-size: 16px; background: #7c3aed; border-color: #c4b5fd; }
-  .dash-button.cooling { background:#475569; border-color:#94a3b8; color:#e2e8f0; }
-  .dash-button.ready { background:#7c3aed; border-color:#c4b5fd; }
-  .lob-button { width:min(100%,150px); min-height:48px; font-size:15px; background:#0369a1; border-color:#7dd3fc; }
-  .lob-button.cooling { background:#475569; border-color:#94a3b8; color:#e2e8f0; }
-  .touch-spacer { pointer-events: none; }
-  .touch-actions { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; flex:1; min-width:0; }
-  .shoot-button {
-    width: min(100%, 170px); min-height: 86px; padding: 10px;
-    background: #b45309; border: 2px solid #fbbf24; border-radius: 18px;
-    font-size: clamp(13px, 4vw, 17px); font-weight: 900; line-height: 1.2;
+    display: flex; align-items: center; justify-content: center; margin: 0; padding: 0; border-radius: 12px;
+    background: var(--panel-3); font: 800 20px/1 var(--display); letter-spacing: .06em;
     touch-action: none; -webkit-tap-highlight-color: transparent;
   }
-  .touch-note { max-width: 190px; text-align:center; font-size:11px; line-height:1.3; color:#cbd5e1; }
+  .dash-button, .lob-button { width: min(100%, 170px); min-height: 48px; font-size: 18px; white-space: nowrap; }
+  .touch-key.ready { border-color: #3ddc7a; }
+  .touch-key.cooling { opacity: .65; border-color: var(--line-strong); }
+  .touch-key.pressed { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); transform: scale(.97); }
+  .touch-actions { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; flex: 1; min-width: 0; }
+  .shoot-button {
+    width: min(100%, 170px); min-height: 86px; padding: 10px; border: 2px solid #fff3c4; border-radius: 18px;
+    background: var(--amber); color: var(--amber-ink);
+    font: 800 clamp(16px, 4.6vw, 21px)/1.1 var(--display); letter-spacing: .05em;
+    touch-action: none; -webkit-tap-highlight-color: transparent;
+  }
+  .shoot-button.pressed { background: #ffe27a; transform: scale(.97); }
+  .touch-note { max-width: 190px; text-align: center; font-size: 11px; line-height: 1.3; color: var(--chalk-dim); }
+
   @media (max-width: 760px), (pointer: coarse) {
-    body { display:block; min-height:100vh; min-height:100dvh; overflow:auto; padding: max(8px, env(safe-area-inset-top)) 8px max(12px, env(safe-area-inset-bottom)); }
-    .wrap { width:100%; max-width:1000px; margin:0 auto; }
-    .top { align-items:flex-start; gap:8px; margin: 28px 0 8px; }
-    h1 { font-size: clamp(16px, 4.4vw, 22px); }
-    .hint { font-size: 11px; line-height:1.35; max-width: 48vw; }
-    .score-area { gap:8px; flex-wrap:wrap; justify-content:flex-end; margin-left:auto; }
-    .score-stack { gap:4px; }
-    .cooldown-row { gap:4px; }
-    .cooldown-row .dash-cooldown-hud, .cooldown-row .lob-cooldown-hud { padding:3px 5px; font-size:10px; }
-    #controlsToggle { margin-top:10px; min-width:0; width:100%; padding:10px 16px; }
-    .menu-controls { margin-top:10px; padding:11px 12px; max-width:100%; }
-    .menu-controls p { font-size:12px; }
-    #timer { font-size:18px; min-width:40px; }
-    #score { font-size: clamp(12px, 3.4vw, 16px); }
-    .game-shell { border-radius:8px; }
-    .bottom { align-items:center; flex-wrap:wrap; font-size:11px; }
-    .bottom span { max-width:65%; }
-    #touchControls { display:flex; }
-    .menu-card { width:min(94vw, 480px); padding:30px 16px; }
-    .modeChoice { min-width: min(180px, 39vw); padding:12px 14px; font-size:17px; }
-    .mp-card { max-height:85dvh; overflow-y:auto; padding:20px 16px; }
-    .mp-card h3 { font-size:26px; }
+    body { display: block; overflow: auto; padding: max(8px, env(safe-area-inset-top)) 8px max(12px, env(safe-area-inset-bottom)); }
+    .wrap { width: 100%; max-width: 1000px; margin: 0 auto; }
+    .top { margin: 2px 0 8px; }
+    .sb-team { padding: 5px 10px; gap: 8px; font-size: 18px; }
+    .sb-score { font-size: 26px; }
+    #timer { min-width: 74px; padding: 0 12px; font-size: 24px; }
+    .hud { display: none; }
+    /* The pitch margin is only ~12px tall on phones, so shrink the power meter to fit it. */
+    .charge-wrap { bottom: 2px; gap: 6px; width: min(230px, 64%); }
+    .charge-label { font-size: 9px; }
+    .bar { height: 7px; border-width: 1.5px; }
+    .game-shell { border-radius: 8px; }
+    .bottom { flex-wrap: wrap; font-size: 11px; }
+    #touchControls { display: flex; }
+    .menu-card { padding: 28px 18px 22px; }
+    .mp-card { max-height: 85dvh; overflow-y: auto; padding: 22px 16px; }
+    .mp-card h3 { font-size: 34px; }
+  }
+  @media (max-width: 700px) {
+    /* Phones: the party panel stacks above the menu; leave room for the account button. */
+    .menu-overlay { padding: 62px 10px 16px; }
+    .brand { gap: 10px; margin-bottom: 16px; }
+    #mainModeChoices { gap: 8px; }
+    .modeChoice, .aiChoice { padding: 14px 4px 12px; }
+    .mode-ico { width: 28px; height: 28px; }
+    .mode-name { font-size: 21px; }
+    .mode-sub { font-size: 12px; }
+    #roomCodeDisplay { font-size: 30px; }
+    .menu-overlay.team-open {
+      display: flex !important; flex-direction: column; align-items: center; justify-content: flex-start;
+      gap: 12px; overflow-x: hidden; overflow-y: auto; width: 100%; max-width: 100vw; padding: 62px 10px 16px;
+    }
+    .menu-overlay.team-open .team-panel {
+      display: block; position: relative; left: auto; top: auto; transform: none; order: 0; flex: none;
+      width: 100%; max-width: 480px; max-height: none; overflow: visible; margin: 0 auto; padding: 14px;
+    }
+    .menu-overlay.team-open .menu-card { order: 1; flex: none; grid-column: auto; width: 100%; max-width: 480px; margin: 0 auto; }
+    .team-panel h3 { font-size: 26px; }
+    .team-code { font-size: 26px; letter-spacing: .14em; }
+    #cfAccount { top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); width: min(240px, calc(100vw - 16px)); }
+    #cfAccountToggle { min-height: 38px; padding: 8px 12px; font-size: 13px; }
   }
   @media (orientation: landscape) and (max-height: 520px) and (pointer: coarse) {
     body { padding: 4px 8px; }
-    .top { margin-top: 26px; margin-bottom: 4px; }
-    .hint { display:none; }
+    .top { margin-bottom: 4px; }
     .game-shell { max-height: min(58vh, 360px); }
-    #touchControls { margin-top:6px; padding:5px 8px; gap:8px; }
-    .touch-joystick { width:104px; height:104px; }
-    .shoot-button { min-height:62px; }
+    #touchControls { margin-top: 6px; padding: 5px 8px; gap: 8px; }
+    .touch-joystick { width: 104px; height: 104px; }
+    .shoot-button { min-height: 62px; }
   }
-
-
-  /* Player account control — anchored to the webpage top-right, only while the menu is open */
-  #cfAccount {
-    display:none; position:fixed; top:max(14px, env(safe-area-inset-top)); right:max(14px, env(safe-area-inset-right));
-    z-index:30; width:min(270px, calc(100vw - 28px)); color:#f8fafc; text-align:left;
-    font:14px/1.4 Arial,Helvetica,sans-serif;
-  }
-  #cfAccountToggle {
-    width:100%; min-height:42px; padding:10px 13px; border:1px solid #64748b;
-    border-radius:11px; background:#1f2937; color:#f8fafc; text-align:left;
-    box-shadow:0 5px 18px #0005; font-weight:800;
-  }
-  #cfAccountToggle:hover { background:#334155; }
-  #cfAccountPanel {
-    margin-top:7px; padding:13px; border:1px solid #475569; border-radius:12px;
-    background:#1f2937; box-shadow:0 12px 32px #0008;
-  }
-  #cfAccountPanel[hidden] { display:none !important; }
-  #cfAccountPanel label { display:block; margin:8px 0 5px; font-weight:700; }
-  #cfAccountPanel input {
-    width:100%; min-height:40px; padding:9px 10px; border:1px solid #64748b;
-    border-radius:8px; background:#0f172a; color:#f8fafc; font-size:16px;
-  }
-  #cfAccountPanel button { width:100%; min-height:39px; margin-top:8px; }
-  #cfSaveUsername { background:#15803d; }
-  #cfGoogleButton { display:flex; justify-content:center; margin-top:9px; min-height:40px; }
-  #cfAccountStatus { min-height:18px; margin:8px 0 0; color:#cbd5e1; font-size:12px; overflow-wrap:anywhere; }
-  #cfAccountHint { margin:8px 0 0; color:#fcd34d; font-size:11px; line-height:1.35; }
-  #cfSignOut { background:#475569; }
-  @media (max-width:700px), (pointer:coarse) {
-    #cfAccount { top:max(8px, env(safe-area-inset-top)); right:max(8px, env(safe-area-inset-right)); width:min(230px, calc(100vw - 16px)); }
-    #cfAccountToggle { min-height:38px; padding:8px 10px; font-size:13px; }
-    #cfAccountPanel { padding:10px; }
-  }
-
 </style>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -446,14 +365,14 @@
 
 <div id="cfAccount">
   <button id="cfAccountToggle" type="button" aria-expanded="false" aria-controls="cfAccountPanel">
-    👤 Player account · Sign in
+    Player account · Sign in
   </button>
   <section id="cfAccountPanel" hidden aria-label="Player account">
     <strong>Circle Football account</strong>
-    <p style="margin:5px 0 8px;color:#cbd5e1;font-size:12px;">Save a player name on this browser or connect Google.</p>
+    <p class="cf-note">Save a player name on this browser or connect Google.</p>
     <label for="cfUsername">Player username</label>
     <input id="cfUsername" maxlength="18" autocomplete="nickname" placeholder="e.g. Larry10">
-    <button id="cfSaveUsername" type="button">Save username</button>
+    <button id="cfSaveUsername" class="primary" type="button">Save username</button>
     <div id="cfGoogleButton"></div>
     <div id="cfAccountStatus" aria-live="polite">Not signed in.</div>
     <p id="cfAccountHint">Google sign-in needs your Web OAuth Client ID configured in this file.</p>
@@ -463,24 +382,28 @@
 
 <div id="menuOverlay" class="menu-overlay">
   <div class="menu-card">
-    <h2>⚽ Circle Football</h2>
+    <div class="brand">
+      <svg class="brand-ball" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="29" fill="#f3f6ef" stroke="#06130a" stroke-width="3"/><polygon points="32,20 43.4,28.3 39,41.7 25,41.7 20.6,28.3" fill="#06130a"/><path d="M32 20V7M43.4 28.3L55 24M39 41.7L46.5 52.5M25 41.7L17.5 52.5M20.6 28.3L9 24" stroke="#06130a" stroke-width="3" stroke-linecap="round" fill="none"/></svg>
+      <h2>Circle Football</h2>
+    </div>
     <div id="modeSelect">
       <p>Choose how you want to play</p>
       <div id="mainModeChoices">
-        <button id="cpuBtn" class="modeChoice" type="button">CPU</button>
-        <button id="multiplayerBtn" class="modeChoice" type="button">Multiplayer</button>
-        <button id="teamToggle" type="button" style="background:#9333ea;">👥 Party</button>
+        <button id="cpuBtn" class="modeChoice" type="button"><svg class="mode-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="11.5" rx="2"/><path d="M9 20h6M12 16v4"/></svg><span class="mode-name">Vs CPU</span><span class="mode-sub">Solo match</span></button>
+        <button id="multiplayerBtn" class="modeChoice" type="button"><svg class="mode-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3.2 3.2 3.2 14.8 0 18M12 3c-3.2 3.2-3.2 14.8 0 18"/></svg><span class="mode-name">Online</span><span class="mode-sub">1v1 against a player</span></button>
+        <button id="teamToggle" class="modeChoice" type="button" aria-expanded="false" aria-controls="teamPanel"><svg class="mode-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="3.2"/><circle cx="6" cy="16.5" r="3.2"/><circle cx="18" cy="16.5" r="3.2"/></svg><span class="mode-name">Party</span><span class="mode-sub">Up to 4 players</span></button>
       </div>
       <div id="cpuChoices" style="display:none;">
         <p>How many AI do you want to play against?</p>
-        <button class="aiChoice" data-ai="1" type="button">1 AI</button>
-        <button class="aiChoice" data-ai="2" type="button">2 AI</button>
-        <br>
+        <div class="ai-row">
+          <button class="aiChoice" data-ai="1" type="button"><span class="mode-name">1 AI</span><span class="mode-sub">One striker</span></button>
+          <button class="aiChoice" data-ai="2" type="button"><span class="mode-name">2 AI</span><span class="mode-sub">Striker and defender</span></button>
+        </div>
         <button id="backModeBtn" type="button">Back</button>
       </div>
-      <button id="controlsToggle" type="button" aria-expanded="false" aria-controls="menuControlsPanel">🎮 Controls</button>
+      <button id="controlsToggle" type="button" aria-expanded="false" aria-controls="menuControlsPanel">Controls</button>
       <div id="menuControlsPanel" class="menu-controls" aria-label="Game controls" hidden>
-        <h3>🎮 Controls</h3>
+        <h3>Controls</h3>
         <p><strong>Move:</strong> WASD / arrow keys, or mobile joystick</p>
         <p><strong>Dash:</strong> Space / mobile DASH button (5-second cooldown)</p>
         <p><strong>Normal shot:</strong> Hold and release left-click / F, or HOLD TO CHARGE</p>
@@ -490,29 +413,29 @@
     </div>
   </div>
   <aside id="teamPanel" class="team-panel" aria-label="Team party">
-    <h3>👥 Team Party</h3>
+    <h3>Team party</h3>
     <p id="teamIntro">Create a party and share its code. Up to 4 players can join.</p>
     <div><strong>Party code</strong></div>
     <div id="teamCode" class="team-code">------</div>
-    <button id="teamCreateBtn" type="button">Create Party</button>
-    <hr style="border-color:#475569;margin:14px 0;">
+    <button id="teamCreateBtn" class="primary" type="button">Create party</button>
+    <hr class="team-rule">
     <label for="teamCodeInput"><strong>Join a team</strong></label>
     <input id="teamCodeInput" maxlength="6" placeholder="Enter party code" autocomplete="off" />
-    <button id="teamJoinBtn" type="button">Join Team</button>
+    <button id="teamJoinBtn" type="button">Join team</button>
     <p id="teamStatus" aria-live="polite">Not in a party yet.</p>
-    <div><strong>Players (<span id="teamCount">0</span>/4)</strong></div>
-    <ul id="teamRoster" class="team-roster"><li>Not in a party</li></ul>
-    <button id="teamLeaveBtn" type="button" hidden>Leave Party</button>
-    <button id="teamDisbandBtn" type="button" hidden>Disband Party</button>
+    <div><strong>Squad (<span id="teamCount">0</span>/4)</strong></div>
+    <ul id="teamRoster" class="team-roster"><li class="empty">Not in a party</li></ul>
+    <button id="teamLeaveBtn" type="button" hidden>Leave party</button>
+    <button id="teamDisbandBtn" type="button" hidden>Disband party</button>
   </aside>
 </div>
 
 <div id="multiplayerOverlay" class="mp-overlay">
   <div class="mp-card">
-    <h3>🌐 Multiplayer</h3>
+    <h3>Online match</h3>
     <div id="mpHome">
       <p>Create a room and give the code to your opponent, or join an existing room.</p>
-      <button id="searchOpponentsBtn" type="button">🔎 Search for Opponents</button>
+      <button id="searchOpponentsBtn" class="primary" type="button">Search for opponents</button>
       <p id="mpSearchStatus" aria-live="polite" hidden></p>
       <button id="cancelSearchBtn" type="button" hidden>Cancel Search</button>
       <div class="mp-actions" style="margin-top:12px;">
@@ -534,7 +457,7 @@
       <p>Enter the room code from the host.</p>
       <input id="roomCodeInput" maxlength="6" placeholder="6-character code" autocomplete="off">
       <div class="mp-actions" style="margin-top:12px;">
-        <button id="connectRoomBtn" type="button">Connect</button>
+        <button id="connectRoomBtn" class="primary" type="button">Connect</button>
         <button id="cancelJoinBtn" type="button">Cancel</button>
       </div>
       <p id="mpJoinStatus">Not connected</p>
@@ -545,21 +468,20 @@
 
 <div class="wrap">
   <div class="top">
-    <div id="timer" aria-label="Match timer">1:30</div>
-    <div aria-hidden="true"></div>
-    <div class="score-area">
-      <div class="score-stack">
-        <div id="score">YOU 0 — 0 CPU</div>
-        <div class="cooldown-row" aria-label="Ability cooldowns">
-          <div id="dashCooldownHud" class="dash-cooldown-hud ready">DASH READY · SPACE</div>
-          <div id="lobCooldownHud" class="lob-cooldown-hud ready">LOB READY · RIGHT CLICK</div>
-        </div>
-      </div>
+    <div id="score" class="scoreboard" aria-label="Score">
+      <div class="sb-team sb-me"><span class="sb-name">YOU</span><span id="scoreMe" class="sb-score">0</span></div>
+      <div id="timer" aria-label="Match timer">1:30</div>
+      <div class="sb-team sb-opp"><span id="scoreOpp" class="sb-score">0</span><span id="oppName" class="sb-name">CPU</span></div>
     </div>
   </div>
 
   <div class="game-shell">
-    <canvas id="game" width="960" height="540" tabindex="0"></canvas>
+    <canvas id="game" width="960" height="540" tabindex="0" aria-label="Football pitch"></canvas>
+
+    <div class="hud" aria-label="Ability cooldowns">
+      <div id="dashCooldownHud" class="hud-chip dash-cooldown-hud ready">Dash ready · Space</div>
+      <div id="lobCooldownHud" class="hud-chip lob-cooldown-hud ready">Lob ready · Right click</div>
+    </div>
 
     <div class="charge-wrap">
       <div class="charge-label">SHOT POWER</div>
@@ -574,8 +496,8 @@
       <div>
         <div id="goalMessage">GOAL!</div>
         <div id="fulltimeControls" class="fulltime-controls" style="display:none;">
-          <button id="playAgainBtn" type="button">Play Again?</button>
-          <button id="backMenuBtn" type="button">Back to Menu</button>
+          <button id="playAgainBtn" class="primary" type="button">Play again?</button>
+          <button id="backMenuBtn" type="button">Back to menu</button>
         </div>
       </div>
     </div>
@@ -595,7 +517,7 @@
 
   <div class="bottom">
     <span>Get around the ball and use your position to control the shot direction.</span>
-    <button id="reset">Reset Match</button>
+    <button id="reset" type="button">Reset match</button>
   </div>
 </div>
 
@@ -640,7 +562,7 @@
     let profile = null;
     try { profile = JSON.parse(sessionStorage.getItem(PROFILE_KEY) || "null"); } catch (_) {}
     const label = profile ? (savedName || profile.name || "Google player") : (savedName || "Sign in");
-    toggle.textContent = "👤 Player · " + label;
+    toggle.textContent = "Player · " + label;
   }
   const savedName = localStorage.getItem(USER_KEY);
   if (savedName) usernameInput.value = savedName;
@@ -794,8 +716,14 @@
   const mpStatus = document.getElementById("mpStatus");
   const mpJoinStatus = document.getElementById("mpJoinStatus");
 
-  const W = canvas.width;
-  const H = canvas.height;
+  // Game logic runs in a fixed 960x540 space. The canvas backing store is scaled up
+  // on HiDPI screens so the pitch and players stay sharp instead of blurry.
+  const W = 960;
+  const H = 540;
+  const RS = Math.min(Math.max(window.devicePixelRatio || 1, 1), 2);
+  canvas.width = W * RS;
+  canvas.height = H * RS;
+  ctx.setTransform(RS, 0, 0, RS, 0, 0);
 
   const field = {
     left: 42,
@@ -950,12 +878,17 @@
   let teamLaunchAcks = new Set();
 
   function teamSetStatus(message) { teamStatus.textContent = message; }
+  // Use the username saved in the account panel (the party roster used to say "Player" for everyone).
+  function currentPlayerName() {
+    try { const saved = localStorage.getItem("circleFootballUsername"); if (saved) return saved; } catch (_) {}
+    return teamSelfName;
+  }
   function teamRender() {
     teamCodeEl.textContent = teamPartyCode || "------";
     teamCountEl.textContent = String(teamRoster.length);
     teamRosterEl.replaceChildren();
     if (!teamRoster.length) {
-      const li = document.createElement("li"); li.textContent = "Not in a party"; teamRosterEl.appendChild(li);
+      const li = document.createElement("li"); li.className = "empty"; li.textContent = "Not in a party"; teamRosterEl.appendChild(li);
     } else {
       teamRoster.forEach(person => {
         const li = document.createElement("li");
@@ -1002,7 +935,7 @@
       teamPartyCode = id;
       teamLeaderPeerId = id;
       teamMemberId = id;
-      teamRoster = [{ id, name:teamSelfName, role:"leader" }];
+      teamRoster = [{ id, name:currentPlayerName(), role:"leader" }];
       teamRender(); teamSetStatus("Party ready. You are the leader; waiting for players...");
     });
     thisPeer.on("connection", conn => {
@@ -1068,7 +1001,7 @@
       const conn = teamClientConn;
       conn.on("open", () => {
         if (teamClientConn !== conn) return;
-        conn.send({type:"party-join", name:teamSelfName});
+        conn.send({type:"party-join", name:currentPlayerName()});
         teamSetStatus("Connected to leader. Waiting for party confirmation...");
       });
       conn.on("data", data => {
@@ -1152,10 +1085,36 @@
     return remoteInput;
   }
 
+  const scoreMeEl = document.getElementById("scoreMe");
+  const scoreOppEl = document.getElementById("scoreOpp");
+  const oppNameEl = document.getElementById("oppName");
+
+  // Scoreboard: "me" is always on the left; its colour bar follows the side you play on.
+  function renderScore(me, opp, oppLabel) {
+    const meIsRed = gameMode === "multiplayer" && localSide === "right";
+    scoreEl.style.setProperty("--me", meIsRed ? "#ef4444" : "#22c55e");
+    scoreEl.style.setProperty("--opp", meIsRed ? "#22c55e" : "#ef4444");
+    scoreMeEl.textContent = String(me);
+    scoreOppEl.textContent = String(opp);
+    oppNameEl.textContent = oppLabel;
+    scoreEl.setAttribute("aria-label", `Score: you ${me}, ${oppLabel.toLowerCase()} ${opp}`);
+  }
+
   function setMultiplayerScoreText() {
     const myScore = localSide === "right" ? cpuScore : youScore;
     const opponentScore = localSide === "right" ? youScore : cpuScore;
-    scoreEl.textContent = `YOU ${myScore} — ${opponentScore} OPPONENT`;
+    renderScore(myScore, opponentScore, "OPPONENT");
+  }
+
+  // Shown when the other player disconnects. It must offer a way out, otherwise the
+  // player is stuck on a frozen pitch with no buttons.
+  function showOpponentLeft() {
+    goalMessage.textContent = "OPPONENT LEFT";
+    goalMessage.classList.remove("fade-out");
+    goalMessage.classList.add("show");
+    messageTimer = 999999;
+    playAgainBtn.style.display = "none";
+    fulltimeControls.style.display = "flex";
   }
 
   function setMultiplayerMessage(text) {
@@ -1167,7 +1126,7 @@
     mpSearchStatus.textContent = message;
     mpSearchStatus.hidden = !message;
     searchOpponentsBtn.disabled = searching;
-    searchOpponentsBtn.textContent = searching ? "Searching…" : "🔎 Search for Opponents";
+    searchOpponentsBtn.textContent = searching ? "Searching…" : "Search for opponents";
     cancelSearchBtn.hidden = !searching;
   }
 
@@ -1207,7 +1166,6 @@
 
   function showMultiplayerHome() {
     gameMode = "multiplayer";
-    resetBtn.style.display = "none";
     resetBtn.style.display = "none";
     menuOverlay.style.display = "none";
     multiplayerOverlay.style.display = "grid";
@@ -1256,6 +1214,7 @@
     countdownEl.textContent = "3";
     updateTimerDisplay();
     setMultiplayerScoreText();
+    playAgainBtn.style.display = "";
     multiplayerOverlay.style.display = "none";
     menuOverlay.style.display = "none";
     gameStarted = true;
@@ -1513,8 +1472,7 @@
       if (msg.type === "disconnect") {
         networkReady = false;
         matchOver = true;
-        goalMessage.textContent = "OPPONENT LEFT";
-        goalMessage.classList.add("show");
+        showOpponentLeft();
       }
     });
 
@@ -1524,8 +1482,7 @@
       if (gameStarted && !matchOver) {
         networkReady = false;
         matchOver = true;
-        goalMessage.textContent = "OPPONENT LEFT";
-        goalMessage.classList.add("show");
+        showOpponentLeft();
       }
       mpStatus.textContent = "Connection closed.";
       mpJoinStatus.textContent = "Connection closed.";
@@ -1869,8 +1826,9 @@
     multiplayerOverlay.style.display = "none";
     gameStarted = false;
     matchOver = false;
-    mainModeChoices.style.display = "block";
+    mainModeChoices.style.display = "";   // "" restores the stylesheet's grid; "block" broke the layout
     cpuChoices.style.display = "none";
+    playAgainBtn.style.display = "";
     if (fulltimeFadeTimer) {
       clearTimeout(fulltimeFadeTimer);
       fulltimeFadeTimer = null;
@@ -1986,7 +1944,7 @@
   function resetMatch() {
     youScore = 0;
     cpuScore = 0;
-    scoreEl.textContent = gameMode === "multiplayer" ? "YOU 0 — 0 OPPONENT" : (aiCount === 2 ? "YOU 0 — 0 AI" : "YOU 0 — 0 CPU");
+    renderScore(0, 0, gameMode === "multiplayer" ? "OPPONENT" : (aiCount === 2 ? "AI" : "CPU"));
     resetPositions();
     countdownTimer = 0;
     goTimer = 0;
@@ -1999,6 +1957,7 @@
     countdownEl.textContent = "";
     goalMessage.classList.remove("show", "fade-out");
     fulltimeControls.style.display = "none";
+    playAgainBtn.style.display = "";
     messageTimer = 0;
     matchTime = MATCH_LENGTH;
     matchOver = false;
@@ -2073,9 +2032,7 @@
     if (gameMode === "multiplayer") {
       setMultiplayerScoreText();
     } else {
-      scoreEl.textContent = aiCount === 2
-        ? `YOU ${youScore} — ${cpuScore} AI`
-        : `YOU ${youScore} — ${cpuScore} CPU`;
+      renderScore(youScore, cpuScore, aiCount === 2 ? "AI" : "CPU");
     }
 
     const youScored = gameMode === "multiplayer"
@@ -2089,9 +2046,7 @@
     player.charge = 0;
     cpu.charge = 0;
     charge = 0;
-    charging = false
     charging = false;
-    cpu.charge = 0;
     cpu.charging = false;
 
     if (gameMode === "multiplayer" && multiplayerRole === "host") {
@@ -2772,130 +2727,242 @@
     ball.y = clamp(ball.y, -ball.r, H + ball.r);
   }
 
-  function drawField() {
-    ctx.clearRect(0, 0, W, H);
+  const TAU = Math.PI * 2;
+  let ballSpin = 0;
+  let fieldLayer = null;
 
-    // Grass.
-    ctx.fillStyle = "#15803d";
-    ctx.fillRect(0, 0, W, H);
+  // The pitch never changes, so it is painted once into an off-screen canvas
+  // and copied each frame. That lets it be detailed without costing frame time.
+  function paintField(g) {
+    const fl = field.left, fr = field.right, ft = field.top, fb = field.bottom, cy = H / 2;
+    const gd = field.goalDepth, gh = field.goalHalf;
 
-    // Subtle stripes.
-    for (let i = 0; i < 8; i++) {
-      ctx.fillStyle = i % 2 === 0 ? "rgba(255,255,255,.025)" : "rgba(0,0,0,.025)";
-      ctx.fillRect(
-        field.left + (field.right - field.left) * i / 8,
-        field.top,
-        (field.right - field.left) / 8,
-        field.bottom - field.top
-      );
+    // Run-off area around the pitch.
+    g.fillStyle = "#135a2a";
+    g.fillRect(0, 0, W, H);
+
+    // Mown stripes.
+    const bands = 12, bw = (fr - fl) / bands;
+    for (let i = 0; i < bands; i++) {
+      g.fillStyle = i % 2 ? "#1b7a3a" : "#218c43";
+      g.fillRect(fl + bw * i, ft, bw + 0.5, fb - ft);
     }
 
-    // Boundary.
-    ctx.strokeStyle = "rgba(255,255,255,.9)";
-    ctx.lineWidth = 4;
-    ctx.strokeRect(field.left, field.top, field.right - field.left, field.bottom - field.top);
+    // Soft floodlight vignette.
+    const vg = g.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, W * 0.62);
+    vg.addColorStop(0, "rgba(0,0,0,0)");
+    vg.addColorStop(1, "rgba(0,0,0,.34)");
+    g.fillStyle = vg;
+    g.fillRect(0, 0, W, H);
 
-    // Halfway line.
-    ctx.beginPath();
-    ctx.moveTo(W / 2, field.top);
-    ctx.lineTo(W / 2, field.bottom);
-    ctx.stroke();
+    // Line markings.
+    g.strokeStyle = "rgba(244,247,240,.92)";
+    g.fillStyle = "rgba(244,247,240,.92)";
+    g.lineWidth = 3;
+    g.lineJoin = "round";
+    g.strokeRect(fl, ft, fr - fl, fb - ft);
+    g.beginPath(); g.moveTo(W / 2, ft); g.lineTo(W / 2, fb); g.stroke();
+    g.beginPath(); g.arc(W / 2, cy, 65, 0, TAU); g.stroke();
+    g.beginPath(); g.arc(W / 2, cy, 4, 0, TAU); g.fill();
 
-    // Centre circle.
-    ctx.beginPath();
-    ctx.arc(W / 2, H / 2, 65, 0, Math.PI * 2);
-    ctx.stroke();
+    // Penalty areas, six-yard boxes, penalty spots and the "D" arcs.
+    const boxW = 75, boxH = gh * 2 + 90, sixW = 32, sixH = gh * 2 + 24, spotX = 52, arcR = 38;
+    const theta = Math.acos((boxW - spotX) / arcR);
+    g.strokeRect(fl, cy - boxH / 2, boxW, boxH);
+    g.strokeRect(fr - boxW, cy - boxH / 2, boxW, boxH);
+    g.strokeRect(fl, cy - sixH / 2, sixW, sixH);
+    g.strokeRect(fr - sixW, cy - sixH / 2, sixW, sixH);
+    g.beginPath(); g.arc(fl + spotX, cy, 3.5, 0, TAU); g.fill();
+    g.beginPath(); g.arc(fr - spotX, cy, 3.5, 0, TAU); g.fill();
+    g.beginPath(); g.arc(fl + spotX, cy, arcR, -theta, theta); g.stroke();
+    g.beginPath(); g.arc(fr - spotX, cy, arcR, Math.PI - theta, Math.PI + theta); g.stroke();
 
-    ctx.beginPath();
-    ctx.arc(W / 2, H / 2, 4, 0, Math.PI * 2);
-    ctx.fillStyle = "#fff";
-    ctx.fill();
+    // Corner arcs.
+    const cr = 14;
+    g.beginPath(); g.arc(fl, ft, cr, 0, Math.PI / 2); g.stroke();
+    g.beginPath(); g.arc(fr, ft, cr, Math.PI / 2, Math.PI); g.stroke();
+    g.beginPath(); g.arc(fr, fb, cr, Math.PI, Math.PI * 1.5); g.stroke();
+    g.beginPath(); g.arc(fl, fb, cr, Math.PI * 1.5, TAU); g.stroke();
 
-    // Goal boxes.
-    ctx.strokeRect(field.left, H / 2 - field.goalHalf - 45, 75, field.goalHalf * 2 + 90);
-    ctx.strokeRect(field.right - 75, H / 2 - field.goalHalf - 45, 75, field.goalHalf * 2 + 90);
+    // Goals: netting, frame and posts.
+    for (const side of [-1, 1]) {
+      const gx = side < 0 ? fl - gd : fr;
+      const lineX = side < 0 ? fl : fr;
+      g.fillStyle = "rgba(4,16,10,.55)";
+      g.fillRect(gx, cy - gh, gd, gh * 2);
+      g.save();
+      g.beginPath(); g.rect(gx, cy - gh, gd, gh * 2); g.clip();
+      g.strokeStyle = "rgba(255,255,255,.34)";
+      g.lineWidth = 1;
+      for (let k = -gh * 2; k < gd + gh * 2; k += 8) {
+        g.beginPath(); g.moveTo(gx + k, cy - gh); g.lineTo(gx + k + gh * 2, cy + gh); g.stroke();
+        g.beginPath(); g.moveTo(gx + k + gh * 2, cy - gh); g.lineTo(gx + k, cy + gh); g.stroke();
+      }
+      g.restore();
+      g.strokeStyle = "#f4f7f0";
+      g.lineWidth = 3;
+      g.strokeRect(gx, cy - gh, gd, gh * 2);
+      for (const py of [cy - gh, cy + gh]) {
+        g.beginPath(); g.arc(lineX, py, 5, 0, TAU);
+        g.fillStyle = "#f4f7f0"; g.fill();
+        g.lineWidth = 1.5; g.strokeStyle = "#06130a"; g.stroke();
+      }
+    }
+  }
 
-    // Goals.
-    ctx.fillStyle = "rgba(255,255,255,.28)";
-    ctx.fillRect(field.left - field.goalDepth, H / 2 - field.goalHalf, field.goalDepth, field.goalHalf * 2);
-    ctx.fillRect(field.right, H / 2 - field.goalHalf, field.goalDepth, field.goalHalf * 2);
+  function buildFieldLayer() {
+    fieldLayer = document.createElement("canvas");
+    fieldLayer.width = canvas.width;
+    fieldLayer.height = canvas.height;
+    const g = fieldLayer.getContext("2d");
+    g.scale(RS, RS);
+    paintField(g);
+  }
 
-    ctx.strokeStyle = "#fff";
-    ctx.strokeRect(field.left - field.goalDepth, H / 2 - field.goalHalf, field.goalDepth, field.goalHalf * 2);
-    ctx.strokeRect(field.right, H / 2 - field.goalHalf, field.goalDepth, field.goalHalf * 2);
+  function drawField() {
+    if (!fieldLayer) buildFieldLayer();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(fieldLayer, 0, 0);
+    ctx.setTransform(RS, 0, 0, RS, 0, 0);
   }
 
   function drawCircle(entity, label) {
+    const { x, y, r } = entity;
+
+    // Ground shadow.
     ctx.beginPath();
-    ctx.arc(entity.x + 3, entity.y + 4, entity.r, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0,0,0,.22)";
+    ctx.ellipse(x + 3, y + 5, r, r * 0.86, 0, 0, TAU);
+    ctx.fillStyle = "rgba(0,0,0,.28)";
     ctx.fill();
 
+    // Kit colour with a light-source highlight.
     ctx.beginPath();
-    ctx.arc(entity.x, entity.y, entity.r, 0, Math.PI * 2);
+    ctx.arc(x, y, r, 0, TAU);
     ctx.fillStyle = entity.color;
     ctx.fill();
+    const hl = ctx.createRadialGradient(x - r * 0.4, y - r * 0.45, r * 0.1, x, y, r);
+    hl.addColorStop(0, "rgba(255,255,255,.38)");
+    hl.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = hl;
+    ctx.fill();
 
-    ctx.strokeStyle = "#fff";
+    // Chalk rim plus an inner trim ring.
+    ctx.strokeStyle = "#f4f7f0";
     ctx.lineWidth = 3;
     ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, r - 5.5, 0, TAU);
+    ctx.strokeStyle = "rgba(0,0,0,.2)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
 
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 12px Arial";
+    ctx.font = '800 14px "Barlow Condensed", "Arial Narrow", Arial, sans-serif';
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(label, entity.x, entity.y);
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(0,0,0,.45)";
+    ctx.strokeText(label, x, y + 0.5);
+    ctx.fillStyle = "#fff";
+    ctx.fillText(label, x, y + 0.5);
+  }
+
+  function pentagonPath(cx, cy, rad, rot) {
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const a = rot + i * TAU / 5;
+      const px = cx + Math.cos(a) * rad, py = cy + Math.sin(a) * rad;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
   }
 
   function drawBall() {
     const scale = 1 + Math.min(ball.z, 70) / 95;
     const drawY = ball.y - ball.z;
+    const R = ball.r * scale;
     const shadowScale = Math.max(0.45, 1 - ball.z / 100);
+
+    // Shadow stays on the ground while the ball rises.
     ctx.beginPath();
-    ctx.ellipse(ball.x + 2, ball.y + 4, ball.r * shadowScale, ball.r * 0.58 * shadowScale, 0, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(0,0,0,${Math.max(0.08, 0.25 - ball.z / 400)})`;
+    ctx.ellipse(ball.x + 2, ball.y + 5, ball.r * shadowScale, ball.r * 0.58 * shadowScale, 0, 0, TAU);
+    ctx.fillStyle = `rgba(0,0,0,${Math.max(0.1, 0.32 - ball.z / 380)})`;
     ctx.fill();
+
+    ctx.save();
+    ctx.translate(ball.x, drawY);
+    const body = ctx.createRadialGradient(-R * 0.35, -R * 0.4, R * 0.1, 0, 0, R);
+    body.addColorStop(0, "#ffffff");
+    body.addColorStop(1, "#d3dbe3");
     ctx.beginPath();
-    ctx.arc(ball.x + 2, drawY + 3, ball.r * scale, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fill();
-    ctx.beginPath();
-    ctx.arc(ball.x, drawY, ball.r * scale, 0, Math.PI * 2);
-    ctx.fillStyle = "#fff"; ctx.fill();
-    ctx.strokeStyle = "#111827"; ctx.lineWidth = 2; ctx.stroke();
-    ctx.beginPath();
+    ctx.arc(0, 0, R, 0, TAU);
+    ctx.fillStyle = body;
+    ctx.fill();
+
+    // Panels rotate with the ball's travel.
+    ctx.save();
+    ctx.clip();
+    ctx.rotate(ballSpin);
+    ctx.fillStyle = "#0b1410";
+    ctx.strokeStyle = "#0b1410";
+    ctx.lineWidth = 1.2 * scale;
+    pentagonPath(0, 0, R * 0.38, -Math.PI / 2);
+    ctx.fill();
     for (let i = 0; i < 5; i++) {
-      const a = -Math.PI / 2 + i * Math.PI * 2 / 5;
-      const x = ball.x + Math.cos(a) * 4.5 * scale;
-      const y = drawY + Math.sin(a) * 4.5 * scale;
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      const a = -Math.PI / 2 + i * TAU / 5;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * R * 0.38, Math.sin(a) * R * 0.38);
+      ctx.lineTo(Math.cos(a) * R * 0.74, Math.sin(a) * R * 0.74);
+      ctx.stroke();
+      pentagonPath(Math.cos(a) * R * 1.02, Math.sin(a) * R * 1.02, R * 0.36, a + Math.PI / 2 + Math.PI / 5 * 0);
+      ctx.fill();
     }
-    ctx.closePath(); ctx.fillStyle = "#111827"; ctx.fill();
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, R, 0, TAU);
+    ctx.strokeStyle = "#0b1410";
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+    ctx.restore();
   }
 
   function drawChargeDirection() {
     const entity = gameMode === "multiplayer" && localSide === "right" ? cpu : player;
-    const isCharging = gameMode === "multiplayer" && localSide === "right" ? charging : charging;
-    const kickRange = entity.r + ball.r + 8;
-    if (!isCharging || distance(entity.x, entity.y, ball.x, ball.y) > kickRange) return;
+    const isLob = lobCharging && !charging;
+    if (!(charging || lobCharging) || ball.z > 0.5) return;
+    // Same reach the charge logic uses, so the aim line and the charge bar agree.
+    const kickRange = entity.r + ball.r + (gameMode === "multiplayer" ? 8 : 28);
+    if (distance(entity.x, entity.y, ball.x, ball.y) > kickRange) return;
 
     let dx = ball.x - entity.x;
     let dy = ball.y - entity.y;
     const len = Math.hypot(dx, dy);
     if (len < 0.001) return;
-
     dx /= len;
     dy /= len;
 
-    const lineLen = 35 + charge * 80;
+    const amount = gameMode === "multiplayer" ? entity.charge : charge;
+    const lineLen = 35 + amount * 80;
+    const ex = ball.x + dx * lineLen, ey = ball.y + dy * lineLen;
 
     ctx.save();
-    ctx.strokeStyle = "rgba(250,204,21,.95)";
-    ctx.lineWidth = 5;
+    ctx.strokeStyle = ctx.fillStyle = isLob ? "rgba(125,211,252,.95)" : "rgba(255,201,51,.95)";
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
     ctx.setLineDash([7, 7]);
     ctx.beginPath();
     ctx.moveTo(ball.x, ball.y);
-    ctx.lineTo(ball.x + dx * lineLen, ball.y + dy * lineLen);
+    ctx.lineTo(ex, ey);
     ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(ex + dx * 10, ey + dy * 10);
+    ctx.lineTo(ex - dy * 7, ey + dx * 7);
+    ctx.lineTo(ex + dy * 7, ey - dx * 7);
+    ctx.closePath();
+    ctx.fill();
     ctx.restore();
   }
 
@@ -2915,15 +2982,16 @@
     const remaining = gameMode === "multiplayer" && multiplayerRole === "guest"
       ? localLobCooldown : Math.max(localLobCooldown, Number(entity.__lobCooldown) || 0);
     const onTouchLayout = getComputedStyle(touchControls).display !== "none";
+    lobCooldownHud.style.setProperty("--p", String(Math.min(1, remaining / 5)));
     if (remaining <= 0.04) {
-      lobCooldownHud.textContent = onTouchLayout ? "LOB READY" : "LOB READY · RIGHT CLICK";
+      lobCooldownHud.textContent = onTouchLayout ? "Lob ready" : "Lob ready · Right click";
       lobCooldownHud.classList.add("ready");
       touchLobButton.textContent = "HOLD TO LOB";
       touchLobButton.classList.add("ready");
       touchLobButton.classList.remove("cooling");
       touchLobButton.setAttribute("aria-label", "Hold to charge and release to lob");
     } else {
-      lobCooldownHud.textContent = `LOB · ${remaining.toFixed(1)}s`;
+      lobCooldownHud.textContent = `Lob · ${remaining.toFixed(1)}s`;
       lobCooldownHud.classList.remove("ready");
       touchLobButton.textContent = `${remaining.toFixed(1)}s`;
       touchLobButton.classList.remove("ready");
@@ -2940,8 +3008,9 @@
 
     // Desktop gets the key hint; mobile puts the countdown directly on the
     // DASH button, where the player just pressed it.
+    dashCooldownHud.style.setProperty("--p", String(Math.min(1, remaining / 5)));
     if (remaining <= 0.04) {
-      dashCooldownHud.textContent = onTouchLayout ? "DASH READY" : "DASH READY · SPACE";
+      dashCooldownHud.textContent = onTouchLayout ? "Dash ready" : "Dash ready · Space";
       dashCooldownHud.classList.add("ready");
       dashCooldownHud.classList.remove("cooling");
       touchDashButton.textContent = "DASH";
@@ -2949,7 +3018,7 @@
       touchDashButton.classList.remove("cooling");
       touchDashButton.setAttribute("aria-label", "Dash ready");
     } else {
-      dashCooldownHud.textContent = `DASH · ${remaining.toFixed(1)}s`;
+      dashCooldownHud.textContent = `Dash · ${remaining.toFixed(1)}s`;
       dashCooldownHud.classList.add("cooling");
       dashCooldownHud.classList.remove("ready");
       touchDashButton.textContent = `${remaining.toFixed(1)}s`;
@@ -2962,6 +3031,7 @@
   function update(dt) {
     updateDashCooldownHud();
     updateLobCooldownHud(dt);
+    ballSpin += (ball.vx >= 0 ? 1 : -1) * Math.hypot(ball.vx, ball.vy) * dt * 60 / ball.r * 0.9;
     if (!gameStarted) {
       draw();
       return;
@@ -3138,6 +3208,8 @@
   window.addEventListener("keydown", (e) => {
     if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
     const key = e.key.toLowerCase();
+    // In the menus, Space must still press the focused button (keyboard users).
+    if (key === " " && !gameStarted) return;
     if (["w","a","s","d","arrowup","arrowdown","arrowleft","arrowright"," "].includes(key)) {
       e.preventDefault();
     }
@@ -3156,6 +3228,8 @@
   window.addEventListener("keyup", (e) => {
     if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
     const key = e.key.toLowerCase();
+    // Stop Space from "clicking" a focused button (Firefox fires the click on keyup).
+    if (e.code === "Space" && gameStarted) e.preventDefault();
     keys[key] = false;
     if (e.code === "Space") keys.space = false;
     if (key === "f" && charging) { shoot(false); charging = false; }
@@ -3333,7 +3407,7 @@
     const isOpen = controlsToggle.getAttribute("aria-expanded") === "true";
     controlsToggle.setAttribute("aria-expanded", String(!isOpen));
     menuControlsPanel.hidden = isOpen;
-    controlsToggle.textContent = isOpen ? "🎮 Controls" : "✕ Hide Controls";
+    controlsToggle.textContent = isOpen ? "Controls" : "Hide controls";
   });
 
   cpuBtn.addEventListener("click", () => {
@@ -3380,7 +3454,7 @@
   });
 
   backModeBtn.addEventListener("click", () => {
-    mainModeChoices.style.display = "block";
+    mainModeChoices.style.display = "";
     cpuChoices.style.display = "none";
   });
 
@@ -3448,6 +3522,7 @@
     // control one player can use to restart the shared game for both people.
     if (gameMode === "multiplayer") return;
     resetMatch();
+    canvas.focus();   // so Space (dash) doesn't re-press this button
   });
 
   resetPositions();
