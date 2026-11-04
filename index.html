@@ -337,7 +337,7 @@
     .mode-sub { font-size: 12px; }
     #roomCodeDisplay { font-size: 30px; }
     .menu-overlay.team-open {
-      display: flex !important; flex-direction: column; align-items: center; justify-content: flex-start;
+      display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
       gap: 12px; overflow-x: hidden; overflow-y: auto; width: 100%; max-width: 100vw; padding: 62px 10px 16px;
     }
     .menu-overlay.team-open .team-panel {
@@ -656,6 +656,12 @@
 
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
+  // Some school/work filters block unpkg.com. Try a second CDN before giving up.
+  if (typeof Peer === "undefined") {
+    document.write('<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');
+  }
+</script>
+<script>
 (() => {
   "use strict";
 
@@ -824,6 +830,19 @@
   const MATCHMAKING_SERVER_URL = "wss://circle-football-matchmaking-server.onrender.com";
   let matchmakingSocket = null;
 
+  // School and work networks often block the direct (peer-to-peer) connections that online
+  // play uses. A TURN relay that works over port 443 gets around that. To enable one, paste
+  // your provider's details here, e.g.:
+  //   { urls: ["turn:YOUR-HOST:443?transport=tcp", "turns:YOUR-HOST:443?transport=tcp"],
+  //     username: "YOUR-USERNAME", credential: "YOUR-PASSWORD" }
+  // Leave empty to use PeerJS's default free servers.
+  const TURN_SERVERS = [];
+  function peerOpts(opts) {
+    if (!TURN_SERVERS.length) return opts;
+    return { ...opts, config: { iceServers: [{ urls: "stun:stun.l.google.com:19302" }, ...TURN_SERVERS] } };
+  }
+  const NETWORK_HINT = "Can't connect. School and work Wi-Fi often block online play. Try mobile data or a home network.";
+
   function clearPeerSetupTimer() {
     if (peerSetupTimer !== null) { clearTimeout(peerSetupTimer); peerSetupTimer = null; }
   }
@@ -927,9 +946,10 @@
     teamPartyCode = randomRoomCode();
     teamLeader = true;
     teamRender(); teamSetStatus("Creating party code...");
-    try { teamPeer = new Peer(teamPartyCode, { debug:0 }); }
+    try { teamPeer = new Peer(teamPartyCode, peerOpts({ debug:0 })); }
     catch (err) { teamCleanup("Could not create party: " + (err.message || "connection error")); return; }
     const thisPeer = teamPeer;
+    setTimeout(() => { if (teamPeer === thisPeer && !thisPeer.open) teamSetStatus(NETWORK_HINT); }, 15000);
     thisPeer.on("open", id => {
       if (teamPeer !== thisPeer) return;
       teamPartyCode = id;
@@ -991,9 +1011,10 @@
     teamCleanup();
     if (typeof Peer === "undefined") { teamSetStatus("Party service did not load. Refresh and try again."); return; }
     teamSetStatus("Connecting to party leader...");
-    try { teamPeer = new Peer(undefined, { debug:0 }); }
+    try { teamPeer = new Peer(undefined, peerOpts({ debug:0 })); }
     catch (err) { teamSetStatus("Could not connect: " + (err.message || "connection error")); return; }
     const thisPeer = teamPeer;
+    setTimeout(() => { if (teamPeer === thisPeer && !teamPartyCode) teamSetStatus(NETWORK_HINT); }, 20000);
     thisPeer.on("open", () => {
       if (teamPeer !== thisPeer) return;
       teamMemberId = thisPeer.id;
@@ -1532,7 +1553,7 @@
 
     matchmakingSearchActive = true;
     matchmakingSessionActive = true;
-    try { peer = new Peer(undefined, { debug: 0 }); }
+    try { peer = new Peer(undefined, peerOpts({ debug: 0 })); }
     catch (err) { failOpponentSearch("Could not start multiplayer: " + (err.message || "connection error")); return; }
     const thisPeer = peer;
     peerSetupTimer = setTimeout(() => {
@@ -1624,7 +1645,7 @@
     }
     roomCode = randomRoomCode();
     try {
-      peer = new Peer(roomCode, { debug: 1 });
+      peer = new Peer(roomCode, peerOpts({ debug: 1 }));
     } catch (err) {
       debugPeerError = peerErrorText(err);
       networkStatus("host: failed to create PeerJS instance");
@@ -1697,7 +1718,7 @@
       return;
     }
     try {
-      peer = new Peer(undefined, { debug: 1 });
+      peer = new Peer(undefined, peerOpts({ debug: 1 }));
     } catch (err) {
       debugPeerError = peerErrorText(err);
       networkStatus("guest: failed to create PeerJS instance");
@@ -1838,7 +1859,7 @@
     fulltimeControls.style.display = "none";
     goalMessage.classList.remove("show", "fade-out");
     countdownEl.textContent = "";
-    menuOverlay.style.display = "grid";
+    menuOverlay.style.display = "";
   }
 
   const MAX_CHARGE = 1;
@@ -3427,7 +3448,7 @@
     closeNetwork();
     setOpponentSearchUI("", false);
     multiplayerOverlay.style.display = "none";
-    menuOverlay.style.display = "grid";
+    menuOverlay.style.display = "";
     gameMode = "cpu";
   });
   cancelRoomBtn.addEventListener("click", () => {
