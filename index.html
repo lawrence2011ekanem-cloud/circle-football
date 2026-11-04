@@ -1049,13 +1049,19 @@
             return;
           }
           teamLastLaunchId = launchId;
-          teamSetStatus("Party leader started the match. Starting your game...");
+          teamSetStatus("Party leader is opening the shared match...");
           try {
-            startMatch(selectedAI);
-            teamSetStatus("Match started. You're in the game!");
-            if (conn.open) conn.send({type:"party-match-ack", launchId, memberId:teamMemberId, status:"started"});
+            // Reuse this already-open party connection as the actual game connection.
+            // The leader owns physics and the match clock; this device sends input
+            // and renders the leader's snapshots. Both players are in ONE match.
+            setupConnection(conn, "guest");
+            if (!conn.open) throw new Error("Party connection closed before the match could start.");
+            networkReady = true;
+            conn.send({type:"hello"});
+            teamSetStatus("Connected to the shared match. Waiting for the kickoff...");
+            conn.send({type:"party-match-ack", launchId, memberId:teamMemberId, status:"connected"});
           } catch (err) {
-            teamSetStatus("Couldn't start the party match: " + (err && err.message ? err.message : "unknown game error"));
+            teamSetStatus("Couldn't join the shared party match: " + (err && err.message ? err.message : "unknown connection error"));
             try { if (conn.open) conn.send({type:"party-match-ack", launchId, memberId:teamMemberId, status:"error", message:String(err && err.message || err)}); } catch (_) {}
           }
         } else if (data.type === "party-disbanded") {
@@ -1922,27 +1928,44 @@
   function startPartyAIMatch(selectedAI) {
     if (selectedAI !== 1 && selectedAI !== 2) return;
     if (!teamPartyCode || !teamLeader) return;
+    const members = [...teamConnections.entries()].filter(([, conn]) => conn && conn.open);
+    // The existing authoritative multiplayer engine is 1v1. Avoid pretending
+    // that a 3- or 4-person party can share this match until that engine supports it.
+    if (members.length !== 1) {
+      teamSetStatus(members.length === 0
+        ? "Invite one player and wait until they are connected before starting."
+        : "Shared party matches currently support the leader plus one teammate. Remove extra players first.");
+      return;
+    }
     if (teamLaunchRetryTimer) { clearInterval(teamLaunchRetryTimer); teamLaunchRetryTimer = null; }
     teamLaunchAcks = new Set();
     const launchId = teamLeaderPeerId + ":" + Date.now() + ":" + Math.random().toString(36).slice(2,8);
     teamActiveLaunchId = launchId;
+    const [memberId, gameConn] = members[0];
+    try {
+      // Register the leader as the authoritative multiplayer host BEFORE
+      // notifying the member, so the member's hello cannot arrive too early.
+      setupConnection(gameConn, "host");
+      if (!gameConn.open) throw new Error("The teammate's party connection is no longer open.");
+      networkReady = true;
+    } catch (err) {
+      teamSetStatus("Couldn't prepare the shared match: " + (err && err.message ? err.message : "connection error"));
+      return;
+    }
     const packet = { type:"party-match-start", leaderPeerId:teamLeaderPeerId, aiCount:selectedAI, startedAt:Date.now(), launchId };
     let attempts = 0;
     const sendLaunch = () => {
       attempts++;
-      for (const [id, conn] of teamConnections.entries()) {
-        if (conn.open && !teamLaunchAcks.has(id + ":" + launchId)) {
-          try { conn.send(packet); } catch (_) {}
-        }
+      if (gameConn.open && !teamLaunchAcks.has(memberId + ":" + launchId)) {
+        try { gameConn.send(packet); } catch (_) {}
       }
-      if (attempts >= 8 || teamLaunchAcks.size >= teamConnections.size) {
+      if (attempts >= 8 || teamLaunchAcks.has(memberId + ":" + launchId)) {
         clearInterval(teamLaunchRetryTimer); teamLaunchRetryTimer = null;
       }
     };
     sendLaunch();
     teamLaunchRetryTimer = setInterval(sendLaunch, 700);
-    teamSetStatus("Starting the AI match for your party...");
-    startMatch(selectedAI);
+    teamSetStatus("Opening one shared match for you and your teammate...");
   }
 
   function hideMenuForMatch() {
