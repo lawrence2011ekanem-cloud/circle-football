@@ -1859,7 +1859,7 @@
     fulltimeControls.style.display = "none";
     goalMessage.classList.remove("show", "fade-out");
     countdownEl.textContent = "";
-    menuOverlay.style.display = "";
+    showMainMenu();
   }
 
   const MAX_CHARGE = 1;
@@ -1945,13 +1945,30 @@
     startMatch(selectedAI);
   }
 
+  function hideMenuForMatch() {
+    // A party menu has an extra .team-open layout state. Clear it before
+    // hiding the overlay, and use an important inline display rule so mobile
+    // browser/layout styles cannot leave the party panel covering the pitch.
+    menuOverlay.classList.remove("team-open");
+    menuOverlay.setAttribute("aria-hidden", "true");
+    menuOverlay.style.setProperty("display", "none", "important");
+  }
+
+  function showMainMenu() {
+    menuOverlay.style.removeProperty("display");
+    menuOverlay.style.display = "";
+    menuOverlay.setAttribute("aria-hidden", "false");
+  }
+
   function startMatch(selectedAI) {
+    // Set the match state first; then dismiss the menu as the final UI step.
+    // This keeps the transition reliable when the launch arrives through
+    // PeerJS on a phone rather than through a local button click.
     closeNetwork();
     gameMode = "cpu";
     resetBtn.style.display = "inline-block";
     aiCount = selectedAI;
     resetMatch();
-    menuOverlay.style.display = "none";
     gameStarted = true;
     countdownTimer = 3.0;
     goTimer = 0;
@@ -1959,7 +1976,10 @@
     matchOver = false;
     updateTimerDisplay();
     countdownEl.textContent = "3";
-    canvas.focus();
+    hideMenuForMatch();
+    try { canvas.focus({ preventScroll: true }); } catch (_) {
+      try { canvas.focus(); } catch (_) {}
+    }
   }
 
   function resetMatch() {
