@@ -759,6 +759,16 @@
     shotCooldown: 0
   };
 
+  // Party co-op adds a second human-controlled teammate. The party leader
+  // controls `player`; the guest controls `guestPlayer`. AI opponents remain
+  // `cpu` (and `defender` when two AI are selected).
+  const guestPlayer = {
+    x: 270, y: H / 2 + 42, r: 21,
+    speed: 3.65,
+    color: "#38bdf8",
+    charge: 0
+  };
+
   const defender = {
     x: W - 115, y: H / 2, r: 21,
     speed: 2.65,
@@ -860,6 +870,8 @@
 
   // --- Online multiplayer state ---
   let gameMode = "cpu"; // "cpu" or "multiplayer"
+  let partyCoopMode = false; // party leader + guest vs the selected AI team
+  let partyPendingAiCount = 1;
   let multiplayerRole = null; // "host" or "guest"
   let localSide = null; // "left" or "right"
   let peer = null;
@@ -1049,6 +1061,9 @@
             return;
           }
           teamLastLaunchId = launchId;
+          partyCoopMode = true;
+          partyPendingAiCount = selectedAI;
+          gameMode = "multiplayer";
           teamSetStatus("Party leader is opening the shared match...");
           try {
             // Reuse this already-open party connection as the actual game connection.
@@ -1098,11 +1113,15 @@
   teamDisbandBtn.addEventListener("click", teamDisbandParty);
 
   function controlledEntity() {
-    return localSide === "right" ? cpu : player;
+    return partyCoopMode && multiplayerRole === "guest"
+      ? guestPlayer
+      : (localSide === "right" ? cpu : player);
   }
 
   function remoteEntity() {
-    return localSide === "right" ? player : cpu;
+    return partyCoopMode
+      ? (multiplayerRole === "host" ? guestPlayer : player)
+      : (localSide === "right" ? player : cpu);
   }
 
   function inputForSide(side) {
@@ -1118,7 +1137,7 @@
 
   // Scoreboard: "me" is always on the left; its colour bar follows the side you play on.
   function renderScore(me, opp, oppLabel) {
-    const meIsRed = gameMode === "multiplayer" && localSide === "right";
+    const meIsRed = gameMode === "multiplayer" && localSide === "right" && !partyCoopMode;
     scoreEl.style.setProperty("--me", meIsRed ? "#ef4444" : "#22c55e");
     scoreEl.style.setProperty("--opp", meIsRed ? "#22c55e" : "#ef4444");
     scoreMeEl.textContent = String(me);
@@ -1128,9 +1147,9 @@
   }
 
   function setMultiplayerScoreText() {
-    const myScore = localSide === "right" ? cpuScore : youScore;
-    const opponentScore = localSide === "right" ? youScore : cpuScore;
-    renderScore(myScore, opponentScore, "OPPONENT");
+    const myScore = partyCoopMode ? youScore : (localSide === "right" ? cpuScore : youScore);
+    const opponentScore = partyCoopMode ? cpuScore : (localSide === "right" ? youScore : cpuScore);
+    renderScore(myScore, opponentScore, partyCoopMode ? (aiCount === 2 ? "2 AI" : "AI") : "OPPONENT");
   }
 
   // Shown when the other player disconnects. It must offer a way out, otherwise the
@@ -1173,6 +1192,7 @@
     debugPeerError = "none";
     networkReady = false;
     multiplayerRole = null;
+    partyCoopMode = false;
     localSide = null;
     remoteSide = null;
     remoteInput = { w:false, a:false, s:false, d:false, up:false, down:false, left:false, right:false, space:false, shift:false };
@@ -1214,12 +1234,12 @@
     roomCodeInput.focus();
   }
 
-  function enterMultiplayerMatch(authoritativeEndAt = null, authoritativeServerNow = null) {
+  function enterMultiplayerMatch(authoritativeEndAt = null, authoritativeServerNow = null, selectedAI = 1) {
     resetBtn.style.display = "none";
     rematchReady = false;
     opponentRematchReady = false;
     gameMode = "multiplayer";
-    aiCount = 1;
+    aiCount = partyCoopMode && (selectedAI === 1 || selectedAI === 2) ? selectedAI : 1;
     youScore = 0;
     cpuScore = 0;
     resetPositions();
@@ -1268,8 +1288,8 @@
     const serverNow = Date.now();
     const authoritativeEndAt = serverNow + MATCH_LENGTH * 1000;
     connection.send({ type:"assign", side: remoteSide });
-    connection.send({ type:"start", side: remoteSide, matchEndAt: authoritativeEndAt, serverNow });
-    enterMultiplayerMatch(authoritativeEndAt, serverNow);
+    connection.send({ type:"start", side: remoteSide, matchEndAt: authoritativeEndAt, serverNow, aiCount: partyCoopMode ? partyPendingAiCount : 1 });
+    enterMultiplayerMatch(authoritativeEndAt, serverNow, partyCoopMode ? partyPendingAiCount : 1);
     mpStatus.textContent = "Connected! You are GREEN.";
   }
 
@@ -1325,7 +1345,7 @@
         remoteSide = localSide === "left" ? "right" : (localSide === "right" ? "left" : null);
         debugLastMessage = `guest assigned side=${localSide || "INVALID"}`;
         networkReady = true;
-        mpJoinStatus.textContent = `Connected! You are ${localSide === "left" ? "GREEN" : "RED"}.`;
+        mpJoinStatus.textContent = partyCoopMode ? "Connected! You're playing together against the AI." : `Connected! You are ${localSide === "left" ? "GREEN" : "RED"}.`;
         return;
       }
 
@@ -1344,9 +1364,14 @@
         localInputSeq = 0;
         keys.w = keys.a = keys.s = keys.d = false;
         keys.arrowup = keys.arrowdown = keys.arrowleft = keys.arrowright = false;
+        if (partyCoopMode) {
+          const selectedAI = Number(msg.aiCount);
+          if (selectedAI === 1 || selectedAI === 2) aiCount = selectedAI;
+        }
         enterMultiplayerMatch(
           Number(msg.matchEndAt) || null,
-          Number(msg.serverNow) || Date.now()
+          Number(msg.serverNow) || Date.now(),
+          Number(msg.aiCount) || 1
         );
         return;
       }
@@ -1381,7 +1406,7 @@
         if (msg.seq) lastAuthoritativeSeq = Math.max(lastAuthoritativeSeq, Number(msg.seq) || 0);
         remoteCharging = !!msg.charging;
         remoteCharge = clamp(Number(msg.charge) || 0, 0, 1);
-        const remoteEntity = remoteSide === "left" ? player : cpu;
+        const remoteEntity = partyCoopMode ? guestPlayer : (remoteSide === "left" ? player : cpu);
         remoteEntity.charge = remoteCharge;
         return;
       }
@@ -1389,7 +1414,7 @@
       if (msg.type === "shoot" && role === "host") {
         // Host remains authoritative; report whether the requested shot registered.
         const side = msg.side === "left" || msg.side === "right" ? msg.side : remoteSide;
-        const entity = side === "left" ? player : cpu;
+        const entity = partyCoopMode ? guestPlayer : (side === "left" ? player : cpu);
         const amount = clamp(Number(msg.charge) || 0, 0, 1);
         const accepted = !!side && performShot(entity, amount, !!msg.lob);
         debugLastShoot = `request side=${side} accepted=${accepted} charge=${amount.toFixed(2)}`;
@@ -1401,7 +1426,8 @@
         if (connection && networkReady) connection.send({
           type: "shoot_result", accepted, side, charge: entity.charge,
           ball: {x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, z: ball.z, vz: ball.vz},
-          player: {x: player.x, y: player.y}, cpu: {x: cpu.x, y: cpu.y}
+          player: {x: player.x, y: player.y}, cpu: {x: cpu.x, y: cpu.y},
+          guestPlayer: {x: guestPlayer.x, y: guestPlayer.y}, defender: {x: defender.x, y: defender.y}
         });
         return;
       }
@@ -1411,16 +1437,18 @@
         debugLastMessage = `guest received shoot result accepted=${!!msg.accepted}`;
         if (msg.player) { player.x = msg.player.x; player.y = msg.player.y; }
         if (msg.cpu) { cpu.x = msg.cpu.x; cpu.y = msg.cpu.y; }
+        if (msg.guestPlayer) { guestPlayer.x = msg.guestPlayer.x; guestPlayer.y = msg.guestPlayer.y; }
+        if (msg.defender) { defender.x = msg.defender.x; defender.y = msg.defender.y; }
         if (msg.ball) {
           ball.x = msg.ball.x; ball.y = msg.ball.y;
           ball.vx = msg.ball.vx; ball.vy = msg.ball.vy; ball.z = msg.ball.z || 0; ball.vz = msg.ball.vz || 0;
         }
-        const entity = localSide === "left" ? player : cpu;
+        const entity = partyCoopMode ? guestPlayer : (localSide === "left" ? player : cpu);
         entity.charge = clamp(Number(msg.charge) || 0, 0, 1);
         charge = entity.charge;
         chargeEl.style.width = `${entity.charge * 100}%`;
         if (!msg.accepted) mpJoinStatus.textContent = "Shot didn't register—get a little closer and try again.";
-        else mpJoinStatus.textContent = `Connected! You are ${localSide === "left" ? "GREEN" : "RED"}.`;
+        else mpJoinStatus.textContent = partyCoopMode ? "Connected! You're playing together against the AI." : `Connected! You are ${localSide === "left" ? "GREEN" : "RED"}.`;
         return;
       }
 
@@ -1433,13 +1461,16 @@
           debugHostRemoteKeys = ["w","a","s","d","arrowup","arrowdown","arrowleft","arrowright"]
             .filter(k => msg.remoteInput[k]).join(",") || "none";
         }
-        const localBefore = localSide === "left" ? player : cpu;
+        const localBefore = partyCoopMode ? guestPlayer : (localSide === "left" ? player : cpu);
         const oldLocalX = localBefore.x, oldLocalY = localBefore.y;
         player.x = msg.player.x; player.y = msg.player.y;
         cpu.x = msg.cpu.x; cpu.y = msg.cpu.y;
+        if (msg.guestPlayer) { guestPlayer.x = msg.guestPlayer.x; guestPlayer.y = msg.guestPlayer.y; }
+        if (msg.defender) { defender.x = msg.defender.x; defender.y = msg.defender.y; }
         player.__dashCooldown = Math.max(0, Number(msg.player.dashCooldown) || 0);
         cpu.__dashCooldown = Math.max(0, Number(msg.cpu.dashCooldown) || 0);
-        const localAfter = localSide === "left" ? player : cpu;
+        guestPlayer.__dashCooldown = Math.max(0, Number(msg.guestPlayer?.dashCooldown) || 0);
+        const localAfter = partyCoopMode ? guestPlayer : (localSide === "left" ? player : cpu);
         debugLocalMove = `snapshot Δ ${Math.hypot(localAfter.x-oldLocalX, localAfter.y-oldLocalY).toFixed(2)} px`;
         ball.x = msg.ball.x; ball.y = msg.ball.y;
         ball.vx = msg.ball.vx; ball.vy = msg.ball.vy; ball.z = msg.ball.z || 0; ball.vz = msg.ball.vz || 0;
@@ -1456,7 +1487,8 @@
         remoteCharge = msg.remoteCharge || 0;
         player.charge = msg.leftCharge || 0;
         cpu.charge = msg.rightCharge || 0;
-        charge = localSide === "left" ? player.charge : cpu.charge;
+        if (partyCoopMode) guestPlayer.charge = msg.guestCharge || 0;
+        charge = partyCoopMode ? guestPlayer.charge : (localSide === "left" ? player.charge : cpu.charge);
         updateTimerDisplay();
         setMultiplayerScoreText();
         chargeEl.style.width = `${charge * 100}%`;
@@ -1803,7 +1835,7 @@
       side: localSide,
       keys: relevant,
       charging: charging || lobCharging,
-      charge: localSide === "left" ? player.charge : cpu.charge,
+      charge: partyCoopMode ? guestPlayer.charge : (localSide === "left" ? player.charge : cpu.charge),
       seq
     });
     debugInputsSent++;
@@ -1831,11 +1863,14 @@
       serverNow: Date.now(),
       player:{x:player.x,y:player.y,dashCooldown:player.__dashCooldown || 0},
       cpu:{x:cpu.x,y:cpu.y,dashCooldown:cpu.__dashCooldown || 0},
+      guestPlayer:{x:guestPlayer.x,y:guestPlayer.y,dashCooldown:guestPlayer.__dashCooldown || 0},
+      defender:{x:defender.x,y:defender.y,dashCooldown:defender.__dashCooldown || 0},
       ball:{x:ball.x,y:ball.y,vx:ball.vx,vy:ball.vy,z:ball.z,vz:ball.vz},
       youScore, cpuScore, leftScore: youScore, rightScore: cpuScore,
       matchTime, matchEndAt, matchOver, countdownTimer, goTimer, resetTimer,
       leftCharge: player.charge,
       rightCharge: cpu.charge,
+      guestCharge: guestPlayer.charge,
       countdownText: countdownEl.textContent,
       goalText,
       resultText
@@ -1901,7 +1936,9 @@
   function resetPositions() {
     resetTimer = 0;
     player.x = 220;
-    player.y = H / 2;
+    player.y = partyCoopMode ? H / 2 - 42 : H / 2;
+    guestPlayer.x = 270;
+    guestPlayer.y = H / 2 + 42;
     cpu.x = W - 220;
     cpu.y = H / 2;
     defender.x = W - 115;
@@ -1913,6 +1950,7 @@
     ball.z = 0; ball.vz = 0;
     ball.__lobNoScore = false;
     player.charge = 0;
+    guestPlayer.charge = 0;
     cpu.charge = 0;
     charge = 0;
     charging = false;
@@ -1922,15 +1960,18 @@
     // A fresh kickoff gives the single AI a short, decisive opening phase.
     cpu.__kickoffHunt = 4.5;
     player.__mpCharging = false;
+    guestPlayer.__mpCharging = false;
     cpu.__mpCharging = false;
+    remoteCharging = false;
   }
 
   function startPartyAIMatch(selectedAI) {
     if (selectedAI !== 1 && selectedAI !== 2) return;
     if (!teamPartyCode || !teamLeader) return;
     const members = [...teamConnections.entries()].filter(([, conn]) => conn && conn.open);
-    // The existing authoritative multiplayer engine is 1v1. Avoid pretending
-    // that a 3- or 4-person party can share this match until that engine supports it.
+    // Party co-op currently supports two human players (leader + one guest)
+    // against the selected one- or two-AI team. Extra party members are rejected
+    // rather than being silently left out of the shared match.
     if (members.length !== 1) {
       teamSetStatus(members.length === 0
         ? "Invite one player and wait until they are connected before starting."
@@ -1939,6 +1980,9 @@
     }
     if (teamLaunchRetryTimer) { clearInterval(teamLaunchRetryTimer); teamLaunchRetryTimer = null; }
     teamLaunchAcks = new Set();
+    partyCoopMode = true;
+    partyPendingAiCount = selectedAI;
+    gameMode = "multiplayer";
     const launchId = teamLeaderPeerId + ":" + Date.now() + ":" + Math.random().toString(36).slice(2,8);
     teamActiveLaunchId = launchId;
     const [memberId, gameConn] = members[0];
@@ -2008,7 +2052,7 @@
   function resetMatch() {
     youScore = 0;
     cpuScore = 0;
-    renderScore(0, 0, gameMode === "multiplayer" ? "OPPONENT" : (aiCount === 2 ? "AI" : "CPU"));
+    renderScore(0, 0, partyCoopMode ? (aiCount === 2 ? "2 AI" : "AI") : (gameMode === "multiplayer" ? "OPPONENT" : (aiCount === 2 ? "AI" : "CPU")));
     resetPositions();
     countdownTimer = 0;
     goTimer = 0;
@@ -2053,16 +2097,17 @@
         fulltimeFadeTimer = null;
       }, 750);
     }, 700);
-    const myScore = gameMode === "multiplayer" && localSide === "right" ? cpuScore : youScore;
-    const opponentScore = gameMode === "multiplayer" && localSide === "right" ? youScore : cpuScore;
+    const myScore = partyCoopMode ? youScore : (gameMode === "multiplayer" && localSide === "right" ? cpuScore : youScore);
+    const opponentScore = partyCoopMode ? cpuScore : (gameMode === "multiplayer" && localSide === "right" ? youScore : cpuScore);
     goalMessage.textContent = myScore === opponentScore
       ? "DRAW!"
-      : (myScore > opponentScore ? "YOU WIN! 🏆" : (gameMode === "multiplayer" ? "OPPONENT WINS!" : "AI WINS!"));
+      : (myScore > opponentScore ? "YOU WIN! 🏆" : (partyCoopMode ? "AI WINS!" : (gameMode === "multiplayer" ? "OPPONENT WINS!" : "AI WINS!")));
     goalMessage.classList.remove("fade-out");
     goalMessage.classList.add("show");
     fulltimeControls.style.display = "flex";
     messageTimer = 999999;
     player.charge = 0;
+    guestPlayer.charge = 0;
     cpu.charge = 0;
     charge = 0;
     charging = false;
@@ -2081,6 +2126,7 @@
     ball.z = 0; ball.vz = 0;
     ball.__lobNoScore = false;
     player.charge = 0;
+    guestPlayer.charge = 0;
     cpu.charge = 0;
     charge = 0;
     charging = false;
@@ -2099,9 +2145,9 @@
       renderScore(youScore, cpuScore, aiCount === 2 ? "AI" : "CPU");
     }
 
-    const youScored = gameMode === "multiplayer"
-      ? scoringTeam === localSide
-      : scoringTeam === "left";
+    const youScored = partyCoopMode
+      ? scoringTeam === "left"
+      : (gameMode === "multiplayer" ? scoringTeam === localSide : scoringTeam === "left");
 
     const goalText = youScored
       ? "GOAL! ⚽"
@@ -2111,6 +2157,9 @@
     cpu.charge = 0;
     charge = 0;
     charging = false;
+    lobCharging = false;
+    remoteCharging = false;
+    guestPlayer.__mpCharging = false;
     cpu.charging = false;
 
     if (gameMode === "multiplayer" && multiplayerRole === "host") {
@@ -2135,7 +2184,9 @@
     if (lob) {
       ball.z = 1; ball.vz = 5.8 + amount * 3.0;
       entity.__lobCooldown = 5.0;
-      const localEntity = gameMode === "multiplayer" ? (localSide === "left" ? player : cpu) : player;
+      const localEntity = gameMode === "multiplayer"
+        ? (partyCoopMode ? (multiplayerRole === "guest" ? guestPlayer : player) : (localSide === "left" ? player : cpu))
+        : player;
       if (entity === localEntity) localLobCooldown = 5.0;
     }
     else { ball.z = 0; ball.vz = 0; }
@@ -2146,7 +2197,7 @@
     if (lob && localLobCooldown > 0.04) return;
     debugLastShoot = `attempt by ${localSide || "?"}`;
     if (gameMode === "multiplayer") {
-      const entity = localSide === "left" ? player : cpu;
+      const entity = partyCoopMode ? (multiplayerRole === "guest" ? guestPlayer : player) : (localSide === "left" ? player : cpu);
       if (multiplayerRole === "guest") {
         if (connection && networkReady) {
           connection.send({ type:"shoot", side: localSide, charge: entity.charge, lob });
@@ -2197,7 +2248,7 @@
     if (len >= minDist) return;
 
     if (len < 0.001) {
-      dx = circle === player ? 1 : -1;
+      dx = (circle === player || circle === guestPlayer) ? 1 : -1;
       dy = 0;
       len = 1;
     }
@@ -2240,7 +2291,7 @@
     if (len > 0) {
       dx /= len;
       dy /= len;
-      const localEntity = gameMode === "multiplayer" ? (localSide === "left" ? player : cpu) : player;
+      const localEntity = gameMode === "multiplayer" ? controlledEntity() : player;
       const isCharging = gameMode === "multiplayer"
         ? (!!entity.__mpCharging || (entity === localEntity && (charging || lobCharging)))
         : (!!entity.charging || (entity === player && (charging || lobCharging)));
@@ -2278,7 +2329,7 @@
       // from accidentally making one side appear to "own" the game.
       if (multiplayerRole === "host") {
         const localEntity = localSide === "left" ? player : cpu;
-        const remoteEntity = remoteSide === "left" ? player : cpu;
+        const remoteEntity = partyCoopMode ? guestPlayer : (remoteSide === "left" ? player : cpu);
         const lx = localEntity.x, ly = localEntity.y;
         const rx = remoteEntity.x, ry = remoteEntity.y;
         moveEntity(localEntity, keys, dt);
@@ -2631,7 +2682,7 @@
     let len = Math.hypot(dx, dy);
 
     if (len < 0.001) {
-      dx = circle === player ? 1 : -1;
+      dx = (circle === player || circle === guestPlayer) ? 1 : -1;
       dy = 0;
       len = 1;
     }
@@ -2660,6 +2711,7 @@
     // so the ball cannot phase through either player.
     if (ball.z <= 0.5) {
       resolveBallPlayerCollision(player);
+      if (partyCoopMode) resolveBallPlayerCollision(guestPlayer);
       resolveBallPlayerCollision(cpu);
       if (aiCount === 2) resolveBallPlayerCollision(defender);
     }
@@ -2668,7 +2720,11 @@
       pushBallFromCircle(player, 0.08);
     }
 
-    if (ball.z <= 0.5 && touching(cpu, ball) && !(gameMode === "multiplayer" ? cpu.__mpCharging : cpu.charging)) {
+    if (partyCoopMode && ball.z <= 0.5 && touching(guestPlayer, ball) && !guestPlayer.__mpCharging) {
+      pushBallFromCircle(guestPlayer, 0.08);
+    }
+
+    if (ball.z <= 0.5 && touching(cpu, ball) && !(gameMode === "multiplayer" && !partyCoopMode ? cpu.__mpCharging : cpu.charging)) {
       pushBallFromCircle(cpu, 0.08);
     }
 
@@ -2717,7 +2773,7 @@
     // A lob cannot score. The no-score state ends only when a player receives
     // the ball on the ground, allowing the next ordinary shot to score.
     if (!airborne && ball.__lobNoScore &&
-        (touching(player, ball) || touching(cpu, ball) || (aiCount === 2 && touching(defender, ball)))) {
+        (touching(player, ball) || (partyCoopMode && touching(guestPlayer, ball)) || touching(cpu, ball) || (aiCount === 2 && touching(defender, ball)))) {
       ball.__lobNoScore = false;
     }
     const inMouth = inGoalMouth(ball.y);
@@ -2782,6 +2838,7 @@
     // Final separation after all wall/goal movement.
     if (ball.z <= 0.5) {
       resolveBallPlayerCollision(player);
+      if (partyCoopMode) resolveBallPlayerCollision(guestPlayer);
       resolveBallPlayerCollision(cpu);
       if (aiCount === 2) resolveBallPlayerCollision(defender);
     }
@@ -2993,7 +3050,7 @@
   }
 
   function drawChargeDirection() {
-    const entity = gameMode === "multiplayer" && localSide === "right" ? cpu : player;
+    const entity = gameMode === "multiplayer" ? controlledEntity() : player;
     const isLob = lobCharging && !charging;
     if (!(charging || lobCharging) || ball.z > 0.5) return;
     // Same reach the charge logic uses, so the aim line and the charge bar agree.
@@ -3032,9 +3089,16 @@
 
   function draw() {
     drawField();
-    drawCircle(player, gameMode === "multiplayer" ? (localSide === "left" ? "YOU" : "OPP") : "YOU");
-    drawCircle(cpu, gameMode === "multiplayer" ? (localSide === "right" ? "YOU" : "OPP") : (aiCount === 2 ? "ST" : "CPU"));
-    if (aiCount === 2) drawCircle(defender, "DEF");
+    if (partyCoopMode) {
+      drawCircle(player, multiplayerRole === "host" ? "YOU" : "ALLY");
+      drawCircle(guestPlayer, multiplayerRole === "guest" ? "YOU" : "ALLY");
+      drawCircle(cpu, aiCount === 2 ? "ST" : "CPU");
+      if (aiCount === 2) drawCircle(defender, "DEF");
+    } else {
+      drawCircle(player, gameMode === "multiplayer" ? (localSide === "left" ? "YOU" : "OPP") : "YOU");
+      drawCircle(cpu, gameMode === "multiplayer" ? (localSide === "right" ? "YOU" : "OPP") : (aiCount === 2 ? "ST" : "CPU"));
+      if (aiCount === 2) drawCircle(defender, "DEF");
+    }
     drawBall();
     drawChargeDirection();
   }
@@ -3042,7 +3106,8 @@
   function updateLobCooldownHud(dt) {
     localLobCooldown = Math.max(0, localLobCooldown - dt);
     let entity = player;
-    if (gameMode === "multiplayer" && localSide === "right") entity = cpu;
+    if (gameMode === "multiplayer" && partyCoopMode && multiplayerRole === "guest") entity = guestPlayer;
+    else if (gameMode === "multiplayer" && localSide === "right") entity = cpu;
     const remaining = gameMode === "multiplayer" && multiplayerRole === "guest"
       ? localLobCooldown : Math.max(localLobCooldown, Number(entity.__lobCooldown) || 0);
     const onTouchLayout = getComputedStyle(touchControls).display !== "none";
@@ -3066,7 +3131,8 @@
 
   function updateDashCooldownHud() {
     let entity = player;
-    if (gameMode === "multiplayer" && localSide === "right") entity = cpu;
+    if (gameMode === "multiplayer" && partyCoopMode && multiplayerRole === "guest") entity = guestPlayer;
+    else if (gameMode === "multiplayer" && localSide === "right") entity = cpu;
     const remaining = Math.max(0, Number(entity.__dashCooldown) || 0);
     const onTouchLayout = getComputedStyle(touchControls).display !== "none";
 
@@ -3171,7 +3237,7 @@
       if (multiplayerRole === "guest") {
         // The guest submits input only. The host owns player positions,
         // ball physics, collision, scoring, shots, and the match clock.
-        const localEntity = localSide === "left" ? player : cpu;
+        const localEntity = partyCoopMode ? guestPlayer : (localSide === "left" ? player : cpu);
         if ((charging || lobCharging) && ball.z <= 0.5 && distance(localEntity.x, localEntity.y, ball.x, ball.y) <= localEntity.r + ball.r + 8) {
           localEntity.charge = clamp(localEntity.charge + CHARGE_RATE * dt, 0, MAX_CHARGE);
           if (lobCharging) lobCharge = localEntity.charge;
@@ -3190,7 +3256,7 @@
       // Host controls physics AND the official match clock for the entire match.
       // Guests only display the host's clock snapshot, so two browser tabs
       // cannot independently decide when full time happens.
-      const localEntity = localSide === "left" ? player : cpu;
+      const localEntity = partyCoopMode ? player : (localSide === "left" ? player : cpu);
       const localCharging = charging || lobCharging;
       if (localCharging) {
         const kickRange = localEntity.r + ball.r + 8;
@@ -3199,13 +3265,20 @@
           if (lobCharging) lobCharge = localEntity.charge;
         }
       }
-      player.__mpCharging = localSide === "left" ? charging : remoteCharging;
-      cpu.__mpCharging = localSide === "right" ? charging : remoteCharging;
+      player.__mpCharging = partyCoopMode ? charging : (localSide === "left" ? charging : remoteCharging);
+      cpu.__mpCharging = partyCoopMode ? false : (localSide === "right" ? charging : remoteCharging);
+      guestPlayer.__mpCharging = partyCoopMode ? remoteCharging : false;
       player.__mpActiveCharging = player.__mpCharging;
       cpu.__mpActiveCharging = cpu.__mpCharging;
+      guestPlayer.__mpActiveCharging = guestPlayer.__mpCharging;
       player._dummy = player.__mpCharging;
       cpu._dummy = cpu.__mpCharging;
-      chargeEl.style.width = `${Math.max(player.charge, cpu.charge) * 100}%`;
+      guestPlayer._dummy = guestPlayer.__mpCharging;
+      chargeEl.style.width = `${Math.max(player.charge, guestPlayer.charge) * 100}%`;
+      if (partyCoopMode) {
+        moveCPU(dt);
+        if (aiCount === 2) moveDefender(dt);
+      }
       physics(dt);
       networkSendTimer += dt;
       if (networkSendTimer >= NETWORK_RATE) {
