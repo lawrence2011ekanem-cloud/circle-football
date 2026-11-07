@@ -1293,6 +1293,55 @@
     mpStatus.textContent = "Connected! You are GREEN.";
   }
 
+  // If a co-op teammate disconnects, keep the remaining player in the match
+  // and let their device continue as a normal solo-vs-AI game.
+  function continuePartyMatchSolo(reason = "Your teammate left. Continuing solo against the AI.") {
+    if (!partyCoopMode || !gameStarted || matchOver) return false;
+
+    const wasGuest = multiplayerRole === "guest";
+    if (wasGuest) {
+      // The guest controls guestPlayer in co-op; transfer that avatar to the
+      // normal solo player entity before switching game modes.
+      player.x = guestPlayer.x;
+      player.y = guestPlayer.y;
+      player.charge = guestPlayer.charge || 0;
+      player.dashCooldown = guestPlayer.dashCooldown || 0;
+      player.lobCooldown = guestPlayer.lobCooldown || 0;
+    }
+
+    const oldConnection = connection;
+    connection = null;
+    networkReady = false;
+    partyCoopMode = false;
+    multiplayerRole = null;
+    localSide = null;
+    remoteSide = null;
+    gameMode = "cpu";
+    matchEndAt = 0;
+    hostAuthorityLost = false;
+    remoteInput = { w:false, a:false, s:false, d:false, up:false, down:false, left:false, right:false, space:false, shift:false };
+    remoteCharging = false;
+    remoteCharge = 0;
+    networkSendTimer = 0;
+    networkInputTimer = 0;
+    matchmakingSearchActive = false;
+    matchmakingSessionActive = false;
+    stopOpponentSearchPolling();
+    clearConnectionSetupTimer();
+    if (matchmakingSocket) { try { matchmakingSocket.close(); } catch (_) {} matchmakingSocket = null; }
+    if (oldConnection) { try { oldConnection.close(); } catch (_) {} }
+    if (peer) { try { peer.destroy(); } catch (_) {} peer = null; }
+
+    goalMessage.textContent = reason;
+    goalMessage.classList.remove("fade-out");
+    goalMessage.classList.add("show");
+    messageTimer = 3.5;
+    fulltimeControls.style.display = "none";
+    playAgainBtn.style.display = "";
+    setMultiplayerScoreText();
+    return true;
+  }
+
   function setupConnection(conn, role) {
     connection = conn;
     multiplayerRole = role;
@@ -1377,11 +1426,15 @@
       }
 
       if (msg.type === "host_closing" && role === "guest") {
-        hostAuthorityLost = true;
-        networkReady = false;
-        multiplayerRole = "guest";
-        if (msg.matchEndAt) matchEndAt = msg.matchEndAt;
-        mpJoinStatus.textContent = "Host left. Match state is preserved locally.";
+        if (partyCoopMode) {
+          continuePartyMatchSolo("Your teammate left. Continuing solo against the AI.");
+        } else {
+          hostAuthorityLost = true;
+          networkReady = false;
+          multiplayerRole = "guest";
+          if (msg.matchEndAt) matchEndAt = msg.matchEndAt;
+          mpJoinStatus.textContent = "Host left. Match state is preserved locally.";
+        }
         return;
       }
 
@@ -1538,7 +1591,9 @@
     connection.on("close", () => {
       clearConnectionSetupTimer();
       networkStatus(`${role}: data connection closed`);
-      if (gameStarted && !matchOver) {
+      if (partyCoopMode && gameStarted && !matchOver) {
+        continuePartyMatchSolo("Your teammate disconnected. Continuing solo against the AI.");
+      } else if (gameMode === "multiplayer" && gameStarted && !matchOver) {
         networkReady = false;
         matchOver = true;
         showOpponentLeft();
@@ -1553,6 +1608,9 @@
       const message = peerErrorText(err);
       debugPeerError = message;
       networkStatus(`${role}: data connection error`);
+      if (partyCoopMode && gameStarted && !matchOver) {
+        continuePartyMatchSolo("Your teammate's connection failed. Continuing solo against the AI.");
+      }
       mpStatus.textContent = `Connection error: ${message}`;
       mpJoinStatus.textContent = `Connection error: ${message}`;
       if (matchmakingSessionActive) setOpponentSearchUI(`Connection error: ${message}. You can search again.`, false);
