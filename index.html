@@ -779,7 +779,9 @@
     x: W / 2, y: H / 2, r: 13,
     vx: 0, vy: 0,
     z: 0, vz: 0,
-    __lobNoScore: false
+    __lobNoScore: false,
+    curveRemaining: 0,
+    curveSign: 0
   };
 
   let youScore = 0;
@@ -1469,7 +1471,7 @@
         const side = msg.side === "left" || msg.side === "right" ? msg.side : remoteSide;
         const entity = partyCoopMode ? guestPlayer : (side === "left" ? player : cpu);
         const amount = clamp(Number(msg.charge) || 0, 0, 1);
-        const accepted = !!side && performShot(entity, amount, !!msg.lob);
+        const accepted = !!side && performShot(entity, amount, !!msg.lob, !!msg.curve);
         debugLastShoot = `request side=${side} accepted=${accepted} charge=${amount.toFixed(2)}`;
         debugLastMessage = `host shoot request side=${side} accepted=${accepted}`;
         if (accepted) {
@@ -1478,7 +1480,7 @@
         }
         if (connection && networkReady) connection.send({
           type: "shoot_result", accepted, side, charge: entity.charge,
-          ball: {x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, z: ball.z, vz: ball.vz},
+          ball: {x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, z: ball.z, vz: ball.vz, curveRemaining: ball.curveRemaining, curveSign: ball.curveSign},
           player: {x: player.x, y: player.y}, cpu: {x: cpu.x, y: cpu.y},
           guestPlayer: {x: guestPlayer.x, y: guestPlayer.y}, defender: {x: defender.x, y: defender.y}
         });
@@ -1494,7 +1496,7 @@
         if (msg.defender) { defender.x = msg.defender.x; defender.y = msg.defender.y; }
         if (msg.ball) {
           ball.x = msg.ball.x; ball.y = msg.ball.y;
-          ball.vx = msg.ball.vx; ball.vy = msg.ball.vy; ball.z = msg.ball.z || 0; ball.vz = msg.ball.vz || 0;
+          ball.vx = msg.ball.vx; ball.vy = msg.ball.vy; ball.z = msg.ball.z || 0; ball.vz = msg.ball.vz || 0; ball.curveRemaining = msg.ball.curveRemaining || 0; ball.curveSign = msg.ball.curveSign || 0;
         }
         const entity = partyCoopMode ? guestPlayer : (localSide === "left" ? player : cpu);
         entity.charge = clamp(Number(msg.charge) || 0, 0, 1);
@@ -1526,7 +1528,7 @@
         const localAfter = partyCoopMode ? guestPlayer : (localSide === "left" ? player : cpu);
         debugLocalMove = `snapshot Δ ${Math.hypot(localAfter.x-oldLocalX, localAfter.y-oldLocalY).toFixed(2)} px`;
         ball.x = msg.ball.x; ball.y = msg.ball.y;
-        ball.vx = msg.ball.vx; ball.vy = msg.ball.vy; ball.z = msg.ball.z || 0; ball.vz = msg.ball.vz || 0;
+        ball.vx = msg.ball.vx; ball.vy = msg.ball.vy; ball.z = msg.ball.z || 0; ball.vz = msg.ball.vz || 0; ball.curveRemaining = msg.ball.curveRemaining || 0; ball.curveSign = msg.ball.curveSign || 0;
         youScore = msg.leftScore !== undefined ? msg.leftScore : msg.youScore;
         cpuScore = msg.rightScore !== undefined ? msg.rightScore : msg.cpuScore;
         if (msg.serverNow) networkClockOffset = Number(msg.serverNow) - Date.now();
@@ -1923,7 +1925,7 @@
       cpu:{x:cpu.x,y:cpu.y,dashCooldown:cpu.__dashCooldown || 0},
       guestPlayer:{x:guestPlayer.x,y:guestPlayer.y,dashCooldown:guestPlayer.__dashCooldown || 0},
       defender:{x:defender.x,y:defender.y,dashCooldown:defender.__dashCooldown || 0},
-      ball:{x:ball.x,y:ball.y,vx:ball.vx,vy:ball.vy,z:ball.z,vz:ball.vz},
+      ball:{x:ball.x,y:ball.y,vx:ball.vx,vy:ball.vy,z:ball.z,vz:ball.vz,curveRemaining:ball.curveRemaining,curveSign:ball.curveSign},
       youScore, cpuScore, leftScore: youScore, rightScore: cpuScore,
       matchTime, matchEndAt, matchOver, countdownTimer, goTimer, resetTimer,
       leftCharge: player.charge,
@@ -2007,6 +2009,7 @@
     ball.vy = 0;
     ball.z = 0; ball.vz = 0;
     ball.__lobNoScore = false;
+    ball.curveRemaining = 0; ball.curveSign = 0;
     player.charge = 0;
     guestPlayer.charge = 0;
     cpu.charge = 0;
@@ -2183,6 +2186,7 @@
     ball.vy = 0;
     ball.z = 0; ball.vz = 0;
     ball.__lobNoScore = false;
+    ball.curveRemaining = 0; ball.curveSign = 0;
     player.charge = 0;
     guestPlayer.charge = 0;
     cpu.charge = 0;
@@ -2225,7 +2229,7 @@
     }
   }
 
-  function performShot(entity, amount, lob = false) {
+  function performShot(entity, amount, lob = false, curve = false) {
     const kickRange = entity.r + ball.r + 28 + (gameMode === "multiplayer" ? 30 : 0);
     if (ball.z > 0.5 || distance(entity.x, entity.y, ball.x, ball.y) > kickRange) return false;
     if (lob && (entity.__lobCooldown || 0) > 0) return false;
@@ -2239,6 +2243,10 @@
     ball.x = entity.x + dx * (entity.r + ball.r + 2);
     ball.y = entity.y + dy * (entity.r + ball.r + 2);
     ball.__lobNoScore = !!lob;
+    ball.curveRemaining = curve && !lob ? 0.9 : 0;
+    // The first prototype bends toward the pitch centreline. This gives the
+    // shot a consistent, learnable curve without adding another aim control.
+    ball.curveSign = ball.y < H / 2 ? 1 : -1;
     if (lob) {
       ball.z = 1; ball.vz = 5.8 + amount * 3.0;
       entity.__lobCooldown = 5.0;
@@ -2251,14 +2259,14 @@
     return true;
   }
 
-  function shoot(lob = false) {
+  function shoot(lob = false, curve = false) {
     if (lob && localLobCooldown > 0.04) return;
     debugLastShoot = `attempt by ${localSide || "?"}`;
     if (gameMode === "multiplayer") {
       const entity = partyCoopMode ? (multiplayerRole === "guest" ? guestPlayer : player) : (localSide === "left" ? player : cpu);
       if (multiplayerRole === "guest") {
         if (connection && networkReady) {
-          connection.send({ type:"shoot", side: localSide, charge: entity.charge, lob });
+          connection.send({ type:"shoot", side: localSide, charge: entity.charge, lob, curve });
           if (lob) { localLobCooldown = 5.0; entity.__lobCooldown = 5.0; }
           debugLastShoot = `sent request side=${localSide} charge=${entity.charge.toFixed(2)}`;
           debugLastMessage = "guest sent shoot request";
@@ -2269,7 +2277,7 @@
         chargeEl.style.width = "0%";
         return;
       }
-      const accepted = performShot(entity, entity.charge, lob);
+      const accepted = performShot(entity, entity.charge, lob, curve);
       debugLastShoot = `host-local side=${localSide} accepted=${accepted}`;
       entity.charge = 0;
       return;
@@ -2277,7 +2285,7 @@
 
     // Use the same kick-range check as charging. The previous extra touching()
     // gate was stricter than the charge range and could silently reject a shot.
-    performShot(player, charge, lob);
+    performShot(player, charge, lob, curve);
     charge = 0;
     if (lob) lobCharge = 0;
     chargeEl.style.width = "0%";
@@ -2812,6 +2820,16 @@
       }
     }
 
+    if (ball.curveRemaining > 0 && ball.z <= 0.5) {
+      const speed = Math.hypot(ball.vx, ball.vy);
+      if (speed > 0.2) {
+        const bend = 0.018 * speed * ball.curveSign * dt * 60;
+        ball.vx += (-ball.vy / speed) * bend;
+        ball.vy += (ball.vx / speed) * bend;
+      }
+      ball.curveRemaining = Math.max(0, ball.curveRemaining - dt);
+      if (ball.curveRemaining <= 0) ball.curveSign = 0;
+    }
     ball.x += ball.vx * dt * 60;
     ball.y += ball.vy * dt * 60;
 
@@ -2833,6 +2851,7 @@
     if (!airborne && ball.__lobNoScore &&
         (touching(player, ball) || (partyCoopMode && touching(guestPlayer, ball)) || touching(cpu, ball) || (aiCount === 2 && touching(defender, ball)))) {
       ball.__lobNoScore = false;
+    ball.curveRemaining = 0; ball.curveSign = 0;
     }
     const inMouth = inGoalMouth(ball.y);
     const bounce = 0.82;
@@ -3417,6 +3436,11 @@
       if (key === "f") charging = true;
       else if (localLobCooldown <= 0.04) { lobCharging = true; lobCharge = 0; }
     }
+    if (key === "z" && !e.repeat && gameStarted && !matchOver) {
+      e.preventDefault();
+      // Hold Z to charge a curved shot; release Z to fire it.
+      charging = true;
+    }
     if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
   });
 
@@ -3428,6 +3452,7 @@
     keys[key] = false;
     if (e.code === "Space") keys.space = false;
     if (key === "f" && charging) { shoot(false); charging = false; }
+    if (key === "z" && charging) { shoot(false, true); charging = false; }
     if (key === "g" && lobCharging) { shoot(true); lobCharging = false; lobCharge = 0; }
     debugLastMessage = `keyup ${key}`;
     if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
