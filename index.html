@@ -101,10 +101,11 @@
     background: rgba(255,201,51,.28); transform-origin: left; transform: scaleX(var(--p, 0));
   }
   .hud-chip.ready { color: #b9f5c9; border-color: #3ddc7a; }
-  .dash-cooldown-hud.cooling, .lob-cooldown-hud:not(.ready) { color: var(--amber); border-color: var(--amber); }
+  .dash-cooldown-hud.cooling, .lob-cooldown-hud:not(.ready), .power-cooldown-hud:not(.ready) { color: var(--amber); border-color: var(--amber); }
 
   .charge-wrap { position: absolute; left: 50%; bottom: 7px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; width: min(340px, 62%); pointer-events: none; }
   .charge-label { flex: none; font: 700 13px/1 var(--display); letter-spacing: .1em; white-space: nowrap; text-shadow: 0 1px 3px #000; }
+  .curve-hint { flex: none; padding: 5px 8px; border: 1px solid rgba(255,201,51,.75); border-radius: 6px; background: rgba(6,19,10,.88); color: #ffe28a; font: 800 11px/1 var(--display); letter-spacing: .06em; white-space: nowrap; text-shadow: 0 1px 2px #000; }
   .bar { flex: 1; height: 11px; border: 2px solid rgba(243,246,239,.9); border-radius: 999px; background: rgba(0,0,0,.4); overflow: hidden; }
   #charge {
     height: 100%; width: 0%; transition: width .03s linear;
@@ -316,8 +317,9 @@
     #timer { min-width: 74px; padding: 0 12px; font-size: 24px; }
     .hud { display: none; }
     /* The pitch margin is only ~12px tall on phones, so shrink the power meter to fit it. */
-    .charge-wrap { bottom: 2px; gap: 6px; width: min(230px, 64%); }
+    .charge-wrap { bottom: 2px; gap: 5px; width: min(420px, 94%); }
     .charge-label { font-size: 9px; }
+    .curve-hint { padding: 4px 5px; font-size: 9px; letter-spacing: .02em; }
     .bar { height: 7px; border-width: 1.5px; }
     .game-shell { border-radius: 8px; }
     .bottom { flex-wrap: wrap; font-size: 11px; }
@@ -407,6 +409,8 @@
         <p><strong>Move:</strong> WASD / arrow keys, or mobile joystick</p>
         <p><strong>Dash:</strong> Space / mobile DASH button (5-second cooldown)</p>
         <p><strong>Normal shot:</strong> Hold and release left-click / F, or HOLD TO CHARGE</p>
+        <p><strong>Curve Shot (Z):</strong> Hold and release to fire a bending shot toward the pitch centreline.</p>
+        <p><strong>Power Shot (C):</strong> Hold until fully charged, then release to fire. Releasing early cancels the shot but still starts the 10-second cooldown.</p>
         <p><strong>Lob pass:</strong> Hold and release right-click / G, or HOLD TO LOB (5-second cooldown)</p>
         <p>Charging slows your movement. Airborne balls cannot be touched or score until they land.</p>
       </div>
@@ -481,11 +485,13 @@
     <div class="hud" aria-label="Ability cooldowns">
       <div id="dashCooldownHud" class="hud-chip dash-cooldown-hud ready">Dash ready · Space</div>
       <div id="lobCooldownHud" class="hud-chip lob-cooldown-hud ready">Lob ready · Right click</div>
+      <div id="powerCooldownHud" class="hud-chip power-cooldown-hud ready">Power ready · C</div>
     </div>
 
     <div class="charge-wrap">
       <div class="charge-label">SHOT POWER</div>
       <div class="bar"><div id="charge"></div></div>
+      <div class="curve-hint" aria-label="Curve shot keyboard shortcut">Z = CURVE SHOT</div>
     </div>
 
     <div class="countdown-overlay">
@@ -675,6 +681,7 @@
   const touchDashButton = document.getElementById("touchDashButton");
   const touchLobButton = document.getElementById("touchLobButton");
   const lobCooldownHud = document.getElementById("lobCooldownHud");
+  const powerCooldownHud = document.getElementById("powerCooldownHud");
   const touchControls = document.getElementById("touchControls");
   const goalMessage = document.getElementById("goalMessage");
   const resetBtn = document.getElementById("reset");
@@ -782,13 +789,18 @@
     __lobNoScore: false,
     curveRemaining: 0,
     curveSign: 0,
-    curveStrength: 0
+    curveStrength: 0,
+    powerShotRemaining: 0,
+    powerShotOwnerSide: "left"
   };
 
   let youScore = 0;
   let cpuScore = 0;
   let charging = false;
   let curveCharging = false;
+  let powerCharging = false;
+  let powerCharge = 0;
+  let localPowerCooldown = 0;
   let lobCharging = false;
   let lobCharge = 0;
   let localLobCooldown = 0;
@@ -1473,7 +1485,7 @@
         const side = msg.side === "left" || msg.side === "right" ? msg.side : remoteSide;
         const entity = partyCoopMode ? guestPlayer : (side === "left" ? player : cpu);
         const amount = clamp(Number(msg.charge) || 0, 0, 1);
-        const accepted = !!side && performShot(entity, amount, !!msg.lob, !!msg.curve);
+        const accepted = !!side && performShot(entity, amount, !!msg.lob, !!msg.curve, !!msg.powerShot);
         debugLastShoot = `request side=${side} accepted=${accepted} charge=${amount.toFixed(2)}`;
         debugLastMessage = `host shoot request side=${side} accepted=${accepted}`;
         if (accepted) {
@@ -1482,7 +1494,7 @@
         }
         if (connection && networkReady) connection.send({
           type: "shoot_result", accepted, side, charge: entity.charge,
-          ball: {x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, z: ball.z, vz: ball.vz, curveRemaining: ball.curveRemaining, curveSign: ball.curveSign, curveStrength: ball.curveStrength},
+          ball: {x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, z: ball.z, vz: ball.vz, curveRemaining: ball.curveRemaining, curveSign: ball.curveSign, curveStrength: ball.curveStrength, powerShotRemaining: ball.powerShotRemaining, powerShotOwnerSide: ball.powerShotOwnerSide},
           player: {x: player.x, y: player.y}, cpu: {x: cpu.x, y: cpu.y},
           guestPlayer: {x: guestPlayer.x, y: guestPlayer.y}, defender: {x: defender.x, y: defender.y}
         });
@@ -1927,7 +1939,7 @@
       cpu:{x:cpu.x,y:cpu.y,dashCooldown:cpu.__dashCooldown || 0},
       guestPlayer:{x:guestPlayer.x,y:guestPlayer.y,dashCooldown:guestPlayer.__dashCooldown || 0},
       defender:{x:defender.x,y:defender.y,dashCooldown:defender.__dashCooldown || 0},
-      ball:{x:ball.x,y:ball.y,vx:ball.vx,vy:ball.vy,z:ball.z,vz:ball.vz,curveRemaining:ball.curveRemaining,curveSign:ball.curveSign,curveStrength:ball.curveStrength},
+      ball:{x:ball.x,y:ball.y,vx:ball.vx,vy:ball.vy,z:ball.z,vz:ball.vz,curveRemaining:ball.curveRemaining,curveSign:ball.curveSign,curveStrength:ball.curveStrength,powerShotRemaining:ball.powerShotRemaining,powerShotOwnerSide:ball.powerShotOwnerSide},
       youScore, cpuScore, leftScore: youScore, rightScore: cpuScore,
       matchTime, matchEndAt, matchOver, countdownTimer, goTimer, resetTimer,
       leftCharge: player.charge,
@@ -2011,13 +2023,15 @@
     ball.vy = 0;
     ball.z = 0; ball.vz = 0;
     ball.__lobNoScore = false;
-    ball.curveRemaining = 0; ball.curveSign = 0; ball.curveStrength = 0;
+    ball.curveRemaining = 0; ball.curveSign = 0; ball.curveStrength = 0; ball.powerShotRemaining = 0;
     player.charge = 0;
     guestPlayer.charge = 0;
     cpu.charge = 0;
     charge = 0;
     charging = false;
     curveCharging = false;
+    powerCharging = false;
+    powerCharge = 0;
     chargeEl.style.width = "0%";
     cpu.charging = false;
     cpu.shotCooldown = 0;
@@ -2176,6 +2190,8 @@
     charge = 0;
     charging = false;
     curveCharging = false;
+    powerCharging = false;
+    powerCharge = 0;
     chargeEl.style.width = "0%";
     ball.vx = ball.vy = 0;
   }
@@ -2190,7 +2206,7 @@
     ball.vy = 0;
     ball.z = 0; ball.vz = 0;
     ball.__lobNoScore = false;
-    ball.curveRemaining = 0; ball.curveSign = 0; ball.curveStrength = 0;
+    ball.curveRemaining = 0; ball.curveSign = 0; ball.curveStrength = 0; ball.powerShotRemaining = 0;
     player.charge = 0;
     guestPlayer.charge = 0;
     cpu.charge = 0;
@@ -2235,7 +2251,7 @@
     }
   }
 
-  function performShot(entity, amount, lob = false, curve = false) {
+  function performShot(entity, amount, lob = false, curve = false, powerShot = false) {
     const kickRange = entity.r + ball.r + 28 + (gameMode === "multiplayer" ? 30 : 0);
     if (ball.z > 0.5 || distance(entity.x, entity.y, ball.x, ball.y) > kickRange) return false;
     if (lob && (entity.__lobCooldown || 0) > 0) return false;
@@ -2244,8 +2260,11 @@
     if (len < 0.001) { dx = entity === player ? 1 : -1; dy = 0; }
     else { dx /= len; dy /= len; }
     const power = MIN_SHOT + (MAX_SHOT - MIN_SHOT) * amount;
-    ball.vx = dx * (lob ? power * 0.78 : power);
-    ball.vy = dy * (lob ? power * 0.78 : power);
+    const shotSpeed = powerShot ? power * 1.38 : power;
+    ball.vx = dx * (lob ? power * 0.78 : shotSpeed);
+    ball.vy = dy * (lob ? power * 0.78 : shotSpeed);
+    ball.powerShotRemaining = powerShot && !lob ? 3.0 : 0;
+    if (powerShot && !lob) ball.powerShotOwnerSide = (gameMode === "multiplayer" && !partyCoopMode && entity === cpu) ? "right" : "left";
     ball.x = entity.x + dx * (entity.r + ball.r + 2);
     ball.y = entity.y + dy * (entity.r + ball.r + 2);
     ball.__lobNoScore = !!lob;
@@ -2268,14 +2287,14 @@
     return true;
   }
 
-  function shoot(lob = false, curve = false) {
+  function shoot(lob = false, curve = false, powerShot = false) {
     if (lob && localLobCooldown > 0.04) return;
     debugLastShoot = `attempt by ${localSide || "?"}`;
     if (gameMode === "multiplayer") {
       const entity = partyCoopMode ? (multiplayerRole === "guest" ? guestPlayer : player) : (localSide === "left" ? player : cpu);
       if (multiplayerRole === "guest") {
         if (connection && networkReady) {
-          connection.send({ type:"shoot", side: localSide, charge: entity.charge, lob, curve });
+          connection.send({ type:"shoot", side: localSide, charge: powerShot ? 1 : entity.charge, lob, curve, powerShot });
           if (lob) { localLobCooldown = 5.0; entity.__lobCooldown = 5.0; }
           debugLastShoot = `sent request side=${localSide} charge=${entity.charge.toFixed(2)}`;
           debugLastMessage = "guest sent shoot request";
@@ -2287,7 +2306,7 @@
         chargeEl.style.width = "0%";
         return;
       }
-      const accepted = performShot(entity, entity.charge, lob, curve);
+      const accepted = performShot(entity, powerShot ? 1 : entity.charge, lob, curve, powerShot);
       debugLastShoot = `host-local side=${localSide} accepted=${accepted}`;
       entity.charge = 0;
       curveCharging = false;
@@ -2296,7 +2315,7 @@
 
     // Use the same kick-range check as charging. The previous extra touching()
     // gate was stricter than the charge range and could silently reject a shot.
-    performShot(player, charge, lob, curve);
+    performShot(player, powerShot ? 1 : charge, lob, curve, powerShot);
     charge = 0;
     curveCharging = false;
     if (lob) lobCharge = 0;
@@ -2338,6 +2357,16 @@
     ball.x = circle.x + dx * (minDist + 0.2);
     ball.y = circle.y + dy * (minDist + 0.2);
 
+    // A live Power Shot knocks back and briefly stuns an opposing player.
+    const circleSide = (circle === player || circle === guestPlayer) ? "left" : "right";
+    if ((ball.powerShotRemaining || 0) > 0 && circleSide !== ball.powerShotOwnerSide) {
+      circle.x += dx * 24;
+      circle.y += dy * 24;
+      circle.__stunTimer = 2.0;
+      clampPlayerToField(circle);
+      ball.powerShotRemaining = 0;
+    }
+
     // If the ball is moving into the player, reflect that component outward.
     const towardPlayer = ball.vx * dx + ball.vy * dy;
     if (towardPlayer < 0) {
@@ -2359,6 +2388,11 @@
     entity.__dashTime = Math.max(0, (entity.__dashTime || 0) - dt);
     entity.__dashCooldown = Math.max(0, (entity.__dashCooldown || 0) - dt);
     entity.__lobCooldown = Math.max(0, (entity.__lobCooldown || 0) - dt);
+    entity.__stunTimer = Math.max(0, (entity.__stunTimer || 0) - dt);
+    if (entity.__stunTimer > 0) {
+      clampPlayerToField(entity);
+      return;
+    }
     const dashDown = !!input.space;
     if (dashDown && !entity.__dashWasDown && len > 0 && entity.__dashCooldown <= 0) {
       entity.__dashTime = 0.20;
@@ -2785,6 +2819,7 @@
   }
 
   function physics(dt) {
+    ball.powerShotRemaining = Math.max(0, (ball.powerShotRemaining || 0) - dt);
     // Players are solid obstacles. Resolve overlaps before and after movement
     // so the ball cannot phase through either player.
     if (ball.z <= 0.5) {
@@ -2867,7 +2902,7 @@
     if (!airborne && ball.__lobNoScore &&
         (touching(player, ball) || (partyCoopMode && touching(guestPlayer, ball)) || touching(cpu, ball) || (aiCount === 2 && touching(defender, ball)))) {
       ball.__lobNoScore = false;
-    ball.curveRemaining = 0; ball.curveSign = 0; ball.curveStrength = 0;
+    ball.curveRemaining = 0; ball.curveSign = 0; ball.curveStrength = 0; ball.powerShotRemaining = 0;
     }
     const inMouth = inGoalMouth(ball.y);
     const bounce = 0.82;
@@ -3222,6 +3257,21 @@
     }
   }
 
+  function updatePowerCooldownHud(dt) {
+    localPowerCooldown = Math.max(0, localPowerCooldown - dt);
+    powerCooldownHud.style.setProperty("--p", String(Math.min(1, localPowerCooldown / 10)));
+    if (powerCharging) {
+      powerCooldownHud.textContent = `Power · ${Math.floor(powerCharge * 100)}%`;
+      powerCooldownHud.classList.remove("ready");
+    } else if (localPowerCooldown <= 0.04) {
+      powerCooldownHud.textContent = "Power ready · C";
+      powerCooldownHud.classList.add("ready");
+    } else {
+      powerCooldownHud.textContent = `Power · ${localPowerCooldown.toFixed(1)}s`;
+      powerCooldownHud.classList.remove("ready");
+    }
+  }
+
   function updateDashCooldownHud() {
     let entity = player;
     if (gameMode === "multiplayer" && partyCoopMode && multiplayerRole === "guest") entity = guestPlayer;
@@ -3254,6 +3304,11 @@
   function update(dt) {
     updateDashCooldownHud();
     updateLobCooldownHud(dt);
+    updatePowerCooldownHud(dt);
+    if (powerCharging) {
+      powerCharge = clamp(powerCharge + CHARGE_RATE * dt, 0, MAX_CHARGE);
+      chargeEl.style.width = `${powerCharge * 100}%`;
+    }
     ballSpin += (ball.vx >= 0 ? 1 : -1) * Math.hypot(ball.vx, ball.vy) * dt * 60 / ball.r * 0.9;
     if (!gameStarted) {
       draw();
@@ -3331,7 +3386,7 @@
         // The guest submits input only. The host owns player positions,
         // ball physics, collision, scoring, shots, and the match clock.
         const localEntity = partyCoopMode ? guestPlayer : (localSide === "left" ? player : cpu);
-        if ((charging || lobCharging) && ball.z <= 0.5 && distance(localEntity.x, localEntity.y, ball.x, ball.y) <= localEntity.r + ball.r + 8) {
+        if ((charging || lobCharging) && !powerCharging && ball.z <= 0.5 && distance(localEntity.x, localEntity.y, ball.x, ball.y) <= localEntity.r + ball.r + 8) {
           localEntity.charge = clamp(localEntity.charge + CHARGE_RATE * dt, 0, MAX_CHARGE);
           if (lobCharging) lobCharge = localEntity.charge;
         }
@@ -3350,7 +3405,7 @@
       // Guests only display the host's clock snapshot, so two browser tabs
       // cannot independently decide when full time happens.
       const localEntity = partyCoopMode ? player : (localSide === "left" ? player : cpu);
-      const localCharging = charging || lobCharging;
+      const localCharging = (charging || lobCharging) && !powerCharging;
       if (localCharging) {
         const kickRange = localEntity.r + ball.r + 8;
         if (ball.z <= 0.5 && distance(localEntity.x, localEntity.y, ball.x, ball.y) <= kickRange) {
@@ -3387,7 +3442,7 @@
 
     const playerKickRange = player.r + ball.r + 28;
     const playerNearBall = distance(player.x, player.y, ball.x, ball.y) <= playerKickRange;
-    const playerCharging = charging || lobCharging;
+    const playerCharging = (charging || lobCharging) && !powerCharging;
     if (playerCharging && playerNearBall) {
       charge = clamp(charge + CHARGE_RATE * dt, 0, MAX_CHARGE);
       if (lobCharging) lobCharge = charge;
@@ -3458,6 +3513,11 @@
       curveCharging = true;
       charging = true;
     }
+    if (e.code === "KeyC" && !e.repeat && gameStarted && !matchOver && localPowerCooldown <= 0.04) {
+      e.preventDefault();
+      powerCharging = true;
+      powerCharge = 0;
+    }
     if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
   });
 
@@ -3470,6 +3530,14 @@
     if (e.code === "Space") keys.space = false;
     if (key === "f" && charging && !curveCharging) { shoot(false); charging = false; }
     if (e.code === "KeyZ" && curveCharging) { e.preventDefault(); shoot(false, true); charging = false; curveCharging = false; }
+    if (e.code === "KeyC" && powerCharging) {
+      e.preventDefault();
+      powerCharging = false;
+      localPowerCooldown = 10.0;
+      if (powerCharge >= 0.995) shoot(false, false, true);
+      powerCharge = 0;
+      chargeEl.style.width = "0%";
+    }
     if (key === "g" && lobCharging) { shoot(true); lobCharging = false; lobCharge = 0; }
     debugLastMessage = `keyup ${key}`;
     if (gameMode === "multiplayer" && multiplayerRole === "guest") sendLocalInput();
