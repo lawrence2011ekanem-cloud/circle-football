@@ -2471,6 +2471,15 @@
 
   function moveCPU(dt) {
     cpu.shotCooldown = Math.max(0, cpu.shotCooldown - dt);
+    // CPU movement is handled by this AI routine, not moveEntity(). Advance
+    // its stun timer here and skip every AI decision while it is stunned.
+    cpu.__stunTimer = Math.max(0, (cpu.__stunTimer || 0) - dt);
+    if (cpu.__stunTimer > 0) {
+      cpu.charging = false;
+      cpu.charge = 0;
+      clampPlayerToField(cpu);
+      return;
+    }
 
     // Kickoff opening: attack the ball diagonally and shoot immediately on
     // grounded contact. Keep this phase short so normal AI decision-making
@@ -2736,6 +2745,17 @@
   }
 
   function moveDefender(dt) {
+    // The defender also has a dedicated AI routine, so handle stun here
+    // instead of relying on moveEntity(). Keep it stationary until recovered.
+    defender.__stunTimer = Math.max(0, (defender.__stunTimer || 0) - dt);
+    if (defender.__stunTimer > 0) {
+      defender.charging = false;
+      defender.charge = 0;
+      defender.x = clamp(defender.x, W / 2 + defender.r, field.right - defender.r);
+      defender.y = clamp(defender.y, field.top + defender.r, field.bottom - defender.r);
+      return;
+    }
+
     // The defender is only allowed to play in its own half.
     const halfLine = W / 2;
     const minX = halfLine + defender.r;
