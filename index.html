@@ -801,6 +801,8 @@
   let powerCharging = false;
   let powerCharge = 0;
   let localPowerCooldown = 0;
+  let powerShotBannerTimer = 0;
+  let powerShotBannerText = "";
   let lobCharging = false;
   let lobCharge = 0;
   let localLobCooldown = 0;
@@ -1493,7 +1495,7 @@
           if (side === remoteSide) remoteCharging = false;
         }
         if (connection && networkReady) connection.send({
-          type: "shoot_result", accepted, side, charge: entity.charge,
+          type: "shoot_result", accepted, side, charge: entity.charge, powerShot: !!msg.powerShot,
           ball: {x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, z: ball.z, vz: ball.vz, curveRemaining: ball.curveRemaining, curveSign: ball.curveSign, curveStrength: ball.curveStrength, powerShotRemaining: ball.powerShotRemaining, powerShotOwnerSide: ball.powerShotOwnerSide},
           player: {x: player.x, y: player.y, stunTimer: player.__stunTimer || 0}, cpu: {x: cpu.x, y: cpu.y, stunTimer: cpu.__stunTimer || 0},
           guestPlayer: {x: guestPlayer.x, y: guestPlayer.y, stunTimer: guestPlayer.__stunTimer || 0}, defender: {x: defender.x, y: defender.y, stunTimer: defender.__stunTimer || 0}
@@ -1502,6 +1504,7 @@
       }
 
       if (msg.type === "shoot_result" && role === "guest") {
+        if (msg.accepted && msg.powerShot) { powerShotBannerText = "POWER SHOT!"; powerShotBannerTimer = 0.85; }
         debugLastShoot = `result side=${msg.side} accepted=${!!msg.accepted}`;
         debugLastMessage = `guest received shoot result accepted=${!!msg.accepted}`;
         if (msg.player) { player.x = msg.player.x; player.y = msg.player.y; player.__stunTimer = Number(msg.player.stunTimer) || 0; }
@@ -2268,7 +2271,11 @@
     ball.vx = dx * (lob ? power * 0.78 : shotSpeed);
     ball.vy = dy * (lob ? power * 0.78 : shotSpeed);
     ball.powerShotRemaining = powerShot && !lob ? 3.0 : 0;
-    if (powerShot && !lob) ball.powerShotOwnerSide = (gameMode === "multiplayer" && !partyCoopMode && entity === cpu) ? "right" : "left";
+    if (powerShot && !lob) {
+      ball.powerShotOwnerSide = (gameMode === "multiplayer" && !partyCoopMode && entity === cpu) ? "right" : "left";
+      powerShotBannerText = "POWER SHOT!";
+      powerShotBannerTimer = 0.85;
+    }
     ball.x = entity.x + dx * (entity.r + ball.r + 2);
     ball.y = entity.y + dy * (entity.r + ball.r + 2);
     ball.__lobNoScore = !!lob;
@@ -2317,9 +2324,13 @@
       return;
     }
 
-    // Use the same kick-range check as charging. The previous extra touching()
-    // gate was stricter than the charge range and could silently reject a shot.
-    performShot(player, powerShot ? 1 : charge, lob, curve, powerShot);
+    // Use the same kick-range check as charging. Make failed Power Shot attempts
+    // visible instead of silently consuming the cooldown.
+    const accepted = performShot(player, powerShot ? 1 : charge, lob, curve, powerShot);
+    if (powerShot && !accepted) {
+      powerShotBannerText = "GET CLOSER TO THE BALL";
+      powerShotBannerTimer = 1.0;
+    }
     charge = 0;
     curveCharging = false;
     if (lob) lobCharge = 0;
@@ -2822,7 +2833,48 @@
     }
   }
 
+  function resolveSweptPowerShotCollision(circle, startX, startY, endX, endY) {
+    if ((ball.powerShotRemaining || 0) <= 0) return false;
+    const circleSide = (circle === player || circle === guestPlayer) ? "left" : "right";
+    if (circleSide === ball.powerShotOwnerSide) return false;
+
+    // Test the ball's entire movement segment, not just its final position.
+    // Fast shots could previously pass through a player between frames.
+    const sx = endX - startX, sy = endY - startY;
+    const segLenSq = sx * sx + sy * sy;
+    const t = segLenSq > 0.0001
+      ? clamp(((circle.x - startX) * sx + (circle.y - startY) * sy) / segLenSq, 0, 1)
+      : 0;
+    const hitX = startX + sx * t, hitY = startY + sy * t;
+    let dx = hitX - circle.x, dy = hitY - circle.y;
+    let dist = Math.hypot(dx, dy);
+    const minDist = circle.r + ball.r;
+    if (dist >= minDist) return false;
+    if (dist < 0.001) {
+      const speed = Math.hypot(ball.vx, ball.vy) || 1;
+      dx = ball.vx / speed; dy = ball.vy / speed; dist = 1;
+    }
+    dx /= dist; dy /= dist;
+    circle.x += dx * 30;
+    circle.y += dy * 30;
+    circle.__stunTimer = 2.5;
+    clampPlayerToField(circle);
+    ball.x = circle.x - dx * (minDist + 1);
+    ball.y = circle.y - dy * (minDist + 1);
+    const towardPlayer = ball.vx * dx + ball.vy * dy;
+    if (towardPlayer < 0) {
+      ball.vx -= 1.7 * towardPlayer * dx;
+      ball.vy -= 1.7 * towardPlayer * dy;
+    }
+    ball.powerShotRemaining = 0;
+    powerShotBannerText = "PLAYER STUNNED!";
+    powerShotBannerTimer = 0.9;
+    return true;
+  }
+
   function physics(dt) {
+    const previousBallX = ball.x;
+    const previousBallY = ball.y;
     ball.powerShotRemaining = Math.max(0, (ball.powerShotRemaining || 0) - dt);
     // Players are solid obstacles. Resolve overlaps before and after movement
     // so the ball cannot phase through either player.
@@ -2887,6 +2939,15 @@
     }
     ball.x += ball.vx * dt * 60;
     ball.y += ball.vy * dt * 60;
+
+    if (ball.powerShotRemaining > 0) {
+      const opponents = ball.powerShotOwnerSide === "left"
+        ? [cpu, ...(aiCount === 2 ? [defender] : [])]
+        : [player, ...(partyCoopMode ? [guestPlayer] : [])];
+      for (const opponent of opponents) {
+        if (resolveSweptPowerShotCollision(opponent, previousBallX, previousBallY, ball.x, ball.y)) break;
+      }
+    }
 
     const friction = Math.pow(BALL_FRICTION, dt * 60);
     ball.vx *= friction;
@@ -3294,6 +3355,21 @@
     }
     drawBall();
     drawChargeDirection();
+    if (powerShotBannerTimer > 0) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, powerShotBannerTimer * 2.5);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.font = '900 25px Arial, sans-serif';
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = "rgba(25,12,0,.9)";
+      ctx.fillStyle = powerShotBannerText === "PLAYER STUNNED!" ? "#fff1a8" : "#ffd34f";
+      ctx.shadowColor = "rgba(255,125,20,.95)";
+      ctx.shadowBlur = 18;
+      ctx.strokeText(powerShotBannerText, W / 2, 12);
+      ctx.fillText(powerShotBannerText, W / 2, 12);
+      ctx.restore();
+    }
   }
 
   function updateLobCooldownHud(dt) {
@@ -3367,6 +3443,7 @@
   }
 
   function update(dt) {
+    powerShotBannerTimer = Math.max(0, powerShotBannerTimer - dt);
     updateDashCooldownHud();
     updateLobCooldownHud(dt);
     updatePowerCooldownHud(dt);
